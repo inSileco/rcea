@@ -1,0 +1,10 @@
+citHeader("To cite rcea in publications use:")
+
+bibentry(
+  bibtype = "Manual",
+  title   = "rcea: {An} {R} package to ...",
+  author  = c(person("Beauchesne David")),
+  year    = "2022",
+  note    = "R package version 0.0.0.9000",
+  url     = "https://github.com/david-beauchesne/rcea"
+)

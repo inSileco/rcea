@@ -1,0 +1,58 @@
+Package: rcea
+Type: Package
+Title: Spatially-explicit cumulative effects assessments in R
+Version: 1.0.0
+Authors@R: c(
+  person(
+    given   = "David",
+    family  = "Beauchesne",
+    role    = c("aut", "cre", "cph"),
+    email   = "david.beauchesne@hotmail.com",
+    comment = c(ORCID = "0000-0002-3590-8161")),
+  person(
+    given   = "Kevin", 
+    family  = "Cazelles", 
+    role    = c("aut"),
+    email   = "kcazelle@uoguelph.ca", 
+    comment = c(ORCID = "0000-0001-6619-9874"))
+ )
+Description: Package providing functionalities to perform spatially explicit cumulative effects assessments
+URL: https://ecosystem-assessments.github.io/rcea/
+BugReports: https://ecosystem-assessments.github.io/rcea/issues
+License: GPL (>= 2)
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    cli,
+    data.table,
+    dplyr,
+    fs,
+    glue,
+    grDevices,
+    graphics,
+    here,
+    motifcensus,
+    purrr,
+    raster,
+    rlang,
+    sf,
+    stats,
+    stars,
+    stringr,
+    terra,
+    tidyr,
+    vroom,
+    whisker,
+    yaml
+Suggests: 
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Remotes:
+    Ecosystem-Assessments/motifcensus
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+Depends: 
+    R (>= 4.1)
