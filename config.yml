@@ -1,0 +1,39 @@
+paths:
+  cache_dir: cache
+  temp_dir: ~
+  catalog_dir: catalog
+  vrt_cache_dir: cache/vrt
+parallel:
+  default_cores: auto
+  memfrac: 0.6
+  terra_parallel: yes
+alignment:
+  policy: error
+  template_path: ~
+  warn_on_align: yes
+  nodata_default: ~
+crs:
+  enforce_projected: yes
+  target_crs: ~
+  area_units: km2
+remote:
+  allowed_schemes:
+  - file
+  - http
+  - https
+  - s3
+  - gs
+  require_cog: yes
+  requires_auth_default: no
+cache:
+  use_cache: yes
+  evict_after_days: 14.0
+  hash_salt: ~
+logging:
+  verbosity: info
+  progress: yes
+shiny:
+  preview_aggregate: 2.0
+  session_cache: yes
+eo_time:
+  time_enabled: yes

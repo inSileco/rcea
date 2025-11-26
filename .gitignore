@@ -50,3 +50,4 @@ docs
 .DS_Store
 /doc/
 /Meta/
+implementation_plan.md
