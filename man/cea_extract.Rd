@@ -19,30 +19,28 @@ cea_extract(dat, dr_sel = NULL, vc_sel = NULL, cumul_fun = "none")
 Function to extract specific drivers and vc of interest from the drivers, valued component, exposure and cumulative effects assessments results, and to aggregate data over drivers, valued components, or drivers and valued components.
 }
 \examples{
-# Data
-drivers <- rcea:::drivers 
-vc <- rcea:::vc
-sensitivity <- rcea:::sensitivity
-
-# Cumulative effects assessment
-dat <- cea(drivers, vc, sensitivity, "stars")
-
-# Extract attributes
-dr_sel <- c("driver1","driver5")
-vc_sel <- c("vc4","vc7","vc10","vc12")
-cea_extract(dat, dr_sel = dr_sel, vc_sel = vc_sel) 
-
-# Cumulative footprint of selected drivers and valued components
-cea_extract(drivers, dr_sel = dr_sel, cumul_fun = "footprint") 
-cea_extract(vc, vc_sel = vc_sel, cumul_fun = "footprint") 
-
-# Cumulative effects of all drivers on all vc
-cea_extract(dat, cumul_fun = "drivers")
-
-# Cumulative effects of all drivers on each vc
-cea_extract(dat, cumul_fun = "vc") 
-
-# Full cumulative effects
-cea_extract(dat, cumul_fun = "full") 
+drv_paths <- system.file(
+  "extdata/rasters",
+  c("pressure_shipping.tif", "pressure_climate.tif"),
+  package = "rcea"
+)
+vc_paths <- system.file(
+  "extdata/rasters",
+  c("vc_cod.tif", "vc_salmon.tif"),
+  package = "rcea"
+)
+drivers <- terra::rast(drv_paths); names(drivers) <- c("shipping", "climate")
+vc <- terra::rast(vc_paths); names(vc) <- c("cod", "salmon")
+sens <- matrix(
+  c(0.8, 0.5,
+    0.2, 0.7),
+  nrow = 2,
+  dimnames = list(c("cod", "salmon"), c("shipping", "climate"))
+)
+ce <- cea(drivers, vc, sens, exportAs = "SpatRaster")
+# Footprint across all layers
+cea_extract(ce, cumul_fun = "footprint")
+# Sum per VC
+cea_extract(ce, cumul_fun = "vc")
 
 }

@@ -3,47 +3,96 @@
 #' Assessment of cumulative effects using the Halpern et al. 2008 method.
 #'
 #' @eval arguments(c("drivers", "vc", "sensitivity"))
-#' @param exportAs string, the type of object that should be created, either a "list" or a "stars" object.
-#'
-#' @export
+#' @param exportAs string, "SpatRaster".
+#' @param align alignment policy, one of "error", "reproject", "template".
+#' @param template optional SpatRaster to align to when `align = "template"`.
+#' @param cores number of threads for terra::app.
+#' @param filename optional path to write the output raster stack (useful for large jobs).
+#' @param engine calculation engine, one of "matrix" (fast, in-memory) or "terra" (streaming/chunked).
 #'
 #' @examples
-#' # Data
-#' drivers <- rcea:::drivers
-#' vc <- rcea:::vc
-#' sensitivity <- rcea:::sensitivity
+#' drv_paths <- system.file(
+#'   "extdata/rasters",
+#'   c("pressure_shipping.tif", "pressure_climate.tif"),
+#'   package = "rcea"
+#' )
+#' vc_paths <- system.file(
+#'   "extdata/rasters",
+#'   c("vc_cod.tif", "vc_salmon.tif"),
+#'   package = "rcea"
+#' )
+#' drivers <- terra::rast(drv_paths)
+#' names(drivers) <- c("shipping", "climate")
+#' vc <- terra::rast(vc_paths)
+#' names(vc) <- c("cod", "salmon")
+#' sens <- matrix(
+#'   c(
+#'     0.8, 0.5,
+#'     0.2, 0.7
+#'   ),
+#'   nrow = 2,
+#'   dimnames = list(c("cod", "salmon"), c("shipping", "climate"))
+#' )
+#' ce <- cea(drivers, vc, sens, exportAs = "SpatRaster")
+#' ce
 #'
-#' # Species-scale effects
-#' (halpern <- cea(drivers, vc, sensitivity, "stars"))
-#' plot(halpern)
-#' halpern <- merge(halpern, name = "vc") |>
-#'   split("drivers")
-#' plot(halpern)
-#' # do not work
-#' # get_cekm_cea(halpern, vc)
-cea <- function(drivers, vc, sensitivity, exportAs = "list") {
-  # needed as 
-  # requireNamespace("stars", quietly = TRUE) 
-  # Exposure
-  dat <- exposure(drivers, vc)
+#' @export
+cea <- function(drivers,
+                vc,
+                sensitivity,
+                exportAs = "SpatRaster",
+                align = "error",
+                template = NULL,
+                cores = NULL,
+                filename = NULL,
+                engine = "matrix") {
+  engine <- match.arg(c("matrix", "terra"))
 
-  # Sensitivity
-  nmDr <- names(dat)
-  nmVC <- names(dat[[1]])
-  sensitivity <- sensitivity[nmVC, nmDr]
+  # Align rasters if needed
+  out_align <- align_pair(drivers, vc, align = align, template = template)
+  drivers <- out_align$drivers
+  vc <- out_align$vc
 
-  # Effect of drivers on valued components (D * VC * u)
-  for (i in seq_len(length(dat))) {
-    dat[[i]] <- sweep(dat[[i]], MARGIN = 2, sensitivity[, i], `*`)
-  }
+  nmDr <- names(drivers)
+  nmVC <- names(vc)
+  sensitivity <- sensitivity[nmVC, nmDr, drop = FALSE]
 
-  # Return
-  if (exportAs == "list") {
-    dat
-  } else if (exportAs == "stars") {
-    xy <- sf::st_coordinates(vc)
-    drNames <- names(drivers)
-    make_stars(dat, drivers, vc)
+  if (engine == "matrix") {
+    # In-memory matrix path: build all vc_driver layers at once
+    dr_mat <- terra::values(drivers, mat = TRUE)
+    vc_mat <- terra::values(vc, mat = TRUE)
+    out_mat <- NULL
+    for (j in seq_along(nmDr)) {
+      exp_j <- vc_mat * dr_mat[, j]
+      eff_j <- sweep(exp_j, MARGIN = 2, sensitivity[, j], `*`)
+      out_mat <- cbind(out_mat, eff_j)
+    }
+    layer_names <- as.vector(outer(nmVC, nmDr, paste, sep = "_"))
+    out_r <- drivers[[1]]
+    out_r <- terra::rast(out_r, nlyrs = length(layer_names))
+    terra::values(out_r) <- out_mat
+    names(out_r) <- layer_names
+    out_r
+  } else {
+    # Combined stack to avoid building exposure separately
+    stk <- c(vc, drivers)
+    nvc <- nlyr(vc)
+    ndr <- nlyr(drivers)
+    layer_names <- as.vector(outer(nmVC, nmDr, paste, sep = "_"))
+
+    fun_ce <- function(x) {
+      v <- x[seq_len(nvc)]
+      d <- x[(nvc + 1):(nvc + ndr)]
+      eff <- (v %o% d) * sensitivity
+      as.vector(eff)
+    }
+
+    args <- list(x = stk, fun = fun_ce)
+    if (!is.null(cores)) args$cores <- cores
+    if (!is.null(filename)) args$filename <- filename
+    res <- do.call(terra::app, args)
+    names(res) <- layer_names
+    res
   }
 }
 

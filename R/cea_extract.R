@@ -8,49 +8,38 @@
 #' @param cumul_fun function to apply on the stars object, one of "drivers" for the cumulative effects of each drivers on all value components, "vc" for the cumulative effects of all drivers on each valued component, "full" for the cumulative effects of all drivers on all valued components, "footprint" for the cumulative footprint of drivers or valued components, and "none" to keep data as is, i.e. to extract specific drivers and valued components from the assessment results.
 #'
 #' @examples
-#' # Data
-#' drivers <- rcea:::drivers 
-#' vc <- rcea:::vc
-#' sensitivity <- rcea:::sensitivity
-#' 
-#' # Cumulative effects assessment
-#' dat <- cea(drivers, vc, sensitivity, "stars")
-#' 
-#' # Extract attributes
-#' dr_sel <- c("driver1","driver5")
-#' vc_sel <- c("vc4","vc7","vc10","vc12")
-#' cea_extract(dat, dr_sel = dr_sel, vc_sel = vc_sel) 
-#'
-#' # Cumulative footprint of selected drivers and valued components
-#' cea_extract(drivers, dr_sel = dr_sel, cumul_fun = "footprint") 
-#' cea_extract(vc, vc_sel = vc_sel, cumul_fun = "footprint") 
-#'
-#' # Cumulative effects of all drivers on all vc
-#' cea_extract(dat, cumul_fun = "drivers")
-#'
-#' # Cumulative effects of all drivers on each vc
-#' cea_extract(dat, cumul_fun = "vc") 
-#'
-#' # Full cumulative effects
-#' cea_extract(dat, cumul_fun = "full") 
+#' drv_paths <- system.file(
+#'   "extdata/rasters",
+#'   c("pressure_shipping.tif", "pressure_climate.tif"),
+#'   package = "rcea"
+#' )
+#' vc_paths <- system.file(
+#'   "extdata/rasters",
+#'   c("vc_cod.tif", "vc_salmon.tif"),
+#'   package = "rcea"
+#' )
+#' drivers <- terra::rast(drv_paths); names(drivers) <- c("shipping", "climate")
+#' vc <- terra::rast(vc_paths); names(vc) <- c("cod", "salmon")
+#' sens <- matrix(
+#'   c(0.8, 0.5,
+#'     0.2, 0.7),
+#'   nrow = 2,
+#'   dimnames = list(c("cod", "salmon"), c("shipping", "climate"))
+#' )
+#' ce <- cea(drivers, vc, sens, exportAs = "SpatRaster")
+#' # Footprint across all layers
+#' cea_extract(ce, cumul_fun = "footprint")
+#' # Sum per VC
+#' cea_extract(ce, cumul_fun = "vc")
 #'
 #' @export
 cea_extract <- function(dat, dr_sel = NULL, vc_sel = NULL, cumul_fun = "none") {
   # Select drivers and vc to extract
   dat <- select_attr(dat, dr_sel, vc_sel)
-  
+
   # Apply relevant aggregations, if applicable
   dat <- aggr(dat, cumul_fun)
-  
-  # Transform to stars if data.frame 
-  if ("data.frame" %in% class(dat)) {
-    if ("drivers" %in% colnames(dat)) {
-      dat <- stars::st_as_stars(dat, dims = c("x","y","drivers"))
-    } else {
-      dat <- stars::st_as_stars(dat, coords = c("x","y"))
-    }
-  }
-  
+
   # Return
   dat
 }
@@ -59,12 +48,14 @@ cea_extract <- function(dat, dr_sel = NULL, vc_sel = NULL, cumul_fun = "none") {
 select_attr <- function(dat, dr_sel = NULL, vc_sel = NULL) {
   # Select drivers, if applicable
   if (!is.null(dr_sel)) {
-    if ("stars" %in% class(dat)) {
-      if ("drivers" %in% names(stars::st_dimensions(dat))) {
-        dat <- dat[,,,dr_sel]      
-      } else {
-        dat <- dat[dr_sel]
+    if (inherits(dat, "SpatRaster")) {
+      nms <- names(dat)
+      # direct match
+      idx <- nms %in% dr_sel
+      if (!any(idx)) {
+        idx <- vapply(nms, function(x) sub(".*_", "", x) %in% dr_sel, logical(1))
       }
+      dat <- dat[[which(idx)]]
     } else {
       if ("drivers" %in% colnames(dat)) {
         dat <- dplyr::filter(dat, drivers %in% dr_sel)
@@ -76,8 +67,13 @@ select_attr <- function(dat, dr_sel = NULL, vc_sel = NULL) {
   
   # Select valued components, if applicable
   if (!is.null(vc_sel)) {
-    if ("stars" %in% class(dat)) {
-      dat <- dat[vc_sel]
+    if (inherits(dat, "SpatRaster")) {
+      nms <- names(dat)
+      idx <- nms %in% vc_sel
+      if (!any(idx)) {
+        idx <- vapply(nms, function(x) sub("_.*", "", x) %in% vc_sel, logical(1))
+      }
+      dat <- dat[[which(idx)]]
     } else {
       dat <- dplyr::select(dat, x, y, dplyr::any_of("drivers"), dplyr::all_of(vc_sel))
     }
@@ -92,8 +88,13 @@ cumul <- function(dat) {
 }
 
 cumul_vc <- function(dat) {
-  if ("stars" %in% class(dat)) {
-    cumul(dat)
+  if (inherits(dat, "SpatRaster")) {
+    vc_ids <- unique(sub("_.*", "", names(dat)))
+    out <- lapply(vc_ids, function(v) {
+      terra::app(dat[[grep(paste0("^", v, "_"), names(dat))]], sum, na.rm = TRUE)
+    })
+    names(out) <- vc_ids
+    terra::rast(out)
   } else {
     dat |>
     dplyr::select(-drivers) |>
@@ -109,10 +110,13 @@ cumul_vc <- function(dat) {
 }
 
 cumul_drivers <- function(dat) {
-  if ("stars" %in% class(dat)) {
-    merge(dat, name = "vc") |>
-    split("drivers") |>
-    cumul()
+  if (inherits(dat, "SpatRaster")) {
+    dr_ids <- unique(sub(".*_", "", names(dat)))
+    out <- lapply(dr_ids, function(d) {
+      terra::app(dat[[grep(paste0("_", d, "$"), names(dat))]], sum, na.rm = TRUE)
+    })
+    names(out) <- dr_ids
+    terra::rast(out)
   } else {
     dat |>
     dplyr::mutate(value = rowSums(dplyr::pick(-x,-y,-drivers), na.rm = TRUE)) |>
@@ -122,12 +126,8 @@ cumul_drivers <- function(dat) {
 }
 
 cumul_full <- function(dat) {
-  if ("stars" %in% class(dat)) {
-    dat |>
-    cumul() |>
-    merge() |>
-    cumul() |>
-    setNames("cumulative_effects")
+  if (inherits(dat, "SpatRaster")) {
+    terra::app(dat, sum, na.rm = TRUE)
   } else {
     dat |>
     dplyr::mutate(value = rowSums(dplyr::pick(-x,-y,-drivers), na.rm = TRUE)) |>
@@ -139,10 +139,8 @@ cumul_full <- function(dat) {
 }
 
 cumul_footprint <- function(dat) {
-  if ("stars" %in% class(dat)) {
-    merge(dat) |>
-    cumul() |>
-    setNames("cumulative_footprint")
+  if (inherits(dat, "SpatRaster")) {
+    terra::app(dat, sum, na.rm = TRUE)
   } else {
     dat |>
     dplyr::mutate(cumulative_footprint = rowSums(dplyr::pick(-x,-y), na.rm = TRUE)) |>

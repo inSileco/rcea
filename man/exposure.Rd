@@ -4,27 +4,47 @@
 \alias{exposure}
 \title{Cumulative exposure assessment}
 \usage{
-exposure(drivers, vc, exportAs = c("list", "stars"))
+exposure(
+  drivers,
+  vc,
+  exportAs = c("SpatRaster"),
+  align = "error",
+  template = NULL,
+  cores = NULL
+)
 }
 \arguments{
 \item{drivers}{distribution and intensity of environmental drivers as stars object}
 
 \item{vc}{distribution of valued components as stars object}
 
-\item{exportAs}{string, the type of object that should be created, either a "list" or a "stars" object}
+\item{exportAs}{string, "SpatRaster" (stack of layers).}
+
+\item{align}{alignment policy, one of "error", "reproject", "template".}
+
+\item{template}{optional SpatRaster to align to when \code{align = "template"}.}
+
+\item{cores}{number of threads for terra::app (default uses terraOptions).}
 }
 \description{
-Assessment of the exposure (i.e. overlap) between valued components and environmental drivers in the context of cumulative effects assessments
+Assessment of the exposure (i.e. overlap) between valued components and environmental drivers in the context of cumulative effects assessments.
 }
 \examples{
-# Data
-drivers <- rcea:::drivers
-vc <- rcea:::vc
+drv_paths <- system.file(
+  "extdata/rasters",
+  c("pressure_shipping.tif", "pressure_climate.tif"),
+  package = "rcea"
+)
+vc_paths <- system.file(
+  "extdata/rasters",
+  c("vc_cod.tif", "vc_salmon.tif"),
+  package = "rcea"
+)
+drivers <- terra::rast(drv_paths)
+names(drivers) <- c("shipping", "climate")
+vc <- terra::rast(vc_paths)
+names(vc) <- c("cod", "salmon")
+expo <- exposure(drivers, vc, exportAs = "SpatRaster")
+expo
 
-# Exposure
-(expo <- exposure(drivers, vc, "stars"))
-plot(expo)
-expo <- merge(expo, name = "vc") |>
-  split("drivers")
-plot(expo)
 }
