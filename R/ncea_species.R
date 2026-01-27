@@ -14,8 +14,18 @@
 #'
 #' \dontrun{
 #' # Network-scale effects for individual species
-#' ncea_species(focus = "vc1", drivers, vc, sensitivity, metaweb, trophic_sensitivity)
-#' ncea_species(focus = "vc1", drivers, vc, sensitivity, metaweb, trophic_sensitivity, output_format = "COG")
+#' ncea_species(
+#'   focus = "vc1",
+#'   drivers, vc, sensitivity,
+#'   metaweb,
+#'   trophic_sensitivity
+#' )
+#' ncea_species(
+#'   focus = "vc1",
+#'   drivers, vc, sensitivity,
+#'   metaweb, trophic_sensitivity,
+#'   output_format = "COG"
+#' )
 #' }
 #' @export
 ncea_species <- function(focus, drivers, vc, sensitivity, metaweb, trophic_sensitivity, w_d = 0.5, w_i = 0.25, output = "output/ncea", output_format = "geotiff") {
@@ -77,7 +87,7 @@ ncea_species <- function(focus, drivers, vc, sensitivity, metaweb, trophic_sensi
           dsn = here::here(out, glue::glue("{focus}.tif")),
         )
       } else if (output_format == "COG") {
-        as(dat, "Raster") |>
+        methods::as(dat, "Raster") |>
           terra::rast() |>
           terra::writeRaster(
             filename = here::here(out, glue::glue("{focus}.tif")),

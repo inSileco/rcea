@@ -22,7 +22,7 @@ globalVariables(c(
   "id_cell", "j", "k", "km2", "M", "pid_i", "pid_j", "pid_k", "pj",
   "pk", "pos", "pos_i", "pos_j", "pos_k", "presence", "psum", "Sensitivity",
   "sensitivity_1", "setNames", "sp", "Species", "type", "uid",
-  "value", "vc_id", "weight", "x", "y"
+  "value", "vc_id", "weight", "x", "y", ".env", "cumulative", "total"
 ))
 
 

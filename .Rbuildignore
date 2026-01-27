@@ -25,4 +25,4 @@ $run_dev.*
 ^scripts/
 ^catalog/
 ^config\\.yml$
-^implementation_plan.md
+^LICENSE.md

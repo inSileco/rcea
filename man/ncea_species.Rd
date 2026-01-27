@@ -49,7 +49,17 @@ trophic_sensitivity <- rcea::trophic_sensitivity
 
 \dontrun{
 # Network-scale effects for individual species
-ncea_species(focus = "vc1", drivers, vc, sensitivity, metaweb, trophic_sensitivity)
-ncea_species(focus = "vc1", drivers, vc, sensitivity, metaweb, trophic_sensitivity, output_format = "COG")
+ncea_species(
+  focus = "vc1",
+  drivers, vc, sensitivity,
+  metaweb,
+  trophic_sensitivity
+)
+ncea_species(
+  focus = "vc1",
+  drivers, vc, sensitivity,
+  metaweb, trophic_sensitivity,
+  output_format = "COG"
+)
 }
 }

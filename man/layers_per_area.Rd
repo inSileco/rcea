@@ -45,11 +45,15 @@ vc_paths <- system.file(
   c("vc_cod.tif", "vc_salmon.tif"),
   package = "rcea"
 )
-drivers <- terra::rast(drv_paths); names(drivers) <- c("shipping", "climate")
-vc <- terra::rast(vc_paths); names(vc) <- c("cod", "salmon")
+drivers <- terra::rast(drv_paths)
+names(drivers) <- c("shipping", "climate")
+vc <- terra::rast(vc_paths)
+names(vc) <- c("cod", "salmon")
 sens <- matrix(
-  c(0.8, 0.5,
-    0.2, 0.7),
+  c(
+    0.8, 0.5,
+    0.2, 0.7
+  ),
   nrow = 2,
   dimnames = list(c("cod", "salmon"), c("shipping", "climate"))
 )

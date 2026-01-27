@@ -16,7 +16,7 @@ load_catalog <- function(layers = file.path("catalog", "layers.csv"),
   if (!file.exists(layers)) stop("layers.csv not found at ", layers, call. = FALSE)
   if (!file.exists(groups)) stop("groups.yaml not found at ", groups, call. = FALSE)
 
-  lay <- read.csv(layers, stringsAsFactors = FALSE)
+  lay <- utils::read.csv(layers, stringsAsFactors = FALSE)
   if ("path" %in% names(lay)) {
     is_remote <- grepl("^(http|https|s3|gs)://", lay$path)
     is_abs <- grepl("^(/|[A-Za-z]:[\\\\/]|\\\\\\\\)", lay$path)

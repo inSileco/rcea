@@ -17,11 +17,15 @@
 #'   c("vc_cod.tif", "vc_salmon.tif"),
 #'   package = "rcea"
 #' )
-#' drivers <- terra::rast(drv_paths); names(drivers) <- c("shipping", "climate")
-#' vc <- terra::rast(vc_paths); names(vc) <- c("cod", "salmon")
+#' drivers <- terra::rast(drv_paths)
+#' names(drivers) <- c("shipping", "climate")
+#' vc <- terra::rast(vc_paths)
+#' names(vc) <- c("cod", "salmon")
 #' sens <- matrix(
-#'   c(0.8, 0.5,
-#'     0.2, 0.7),
+#'   c(
+#'     0.8, 0.5,
+#'     0.2, 0.7
+#'   ),
 #'   nrow = 2,
 #'   dimnames = list(c("cod", "salmon"), c("shipping", "climate"))
 #' )
@@ -91,11 +95,15 @@ layers_extract <- function(dat, layer_ids = NULL, drivers = NULL, vcs = NULL) {
 #'   c("vc_cod.tif", "vc_salmon.tif"),
 #'   package = "rcea"
 #' )
-#' drivers <- terra::rast(drv_paths); names(drivers) <- c("shipping", "climate")
-#' vc <- terra::rast(vc_paths); names(vc) <- c("cod", "salmon")
+#' drivers <- terra::rast(drv_paths)
+#' names(drivers) <- c("shipping", "climate")
+#' vc <- terra::rast(vc_paths)
+#' names(vc) <- c("cod", "salmon")
 #' sens <- matrix(
-#'   c(0.8, 0.5,
-#'     0.2, 0.7),
+#'   c(
+#'     0.8, 0.5,
+#'     0.2, 0.7
+#'   ),
 #'   nrow = 2,
 #'   dimnames = list(c("cod", "salmon"), c("shipping", "climate"))
 #' )
@@ -122,14 +130,13 @@ layers_aggregate <- function(dat,
   dat <- layers_extract(dat, layer_ids = layer_ids, drivers = drivers, vcs = vcs)
 
   agg_fun <- function(x) {
-    switch(
-      fun,
+    switch(fun,
       "sum" = rowSums(x, na.rm = TRUE),
       "mean" = rowMeans(x, na.rm = TRUE),
-      "median" = apply(x, 1, median, na.rm = TRUE),
+      "median" = apply(x, 1, stats::median, na.rm = TRUE),
       "min" = apply(x, 1, min, na.rm = TRUE),
       "max" = apply(x, 1, max, na.rm = TRUE),
-      "sd" = apply(x, 1, sd, na.rm = TRUE)
+      "sd" = apply(x, 1, stats::sd, na.rm = TRUE)
     )
   }
 
@@ -139,8 +146,7 @@ layers_aggregate <- function(dat,
     vc_ids <- sub("_.*", "", nms)
     dr_ids <- sub(".*_", "", nms)
 
-    out <- switch(
-      by,
+    out <- switch(by,
       "none" = dat,
       "drivers" = {
         vc_levels <- unique(vc_ids)
@@ -176,8 +182,7 @@ layers_aggregate <- function(dat,
     vc_ids <- sub("_.*", "", nms)
     dr_ids <- sub(".*_", "", nms)
 
-    out <- switch(
-      by,
+    out <- switch(by,
       "none" = dat,
       "drivers" = {
         vc_levels <- unique(vc_ids)
@@ -200,13 +205,17 @@ layers_aggregate <- function(dat,
       }
     )
 
-    if (exportAs == "matrix") return(raster_to_matrix(out))
+    if (exportAs == "matrix") {
+      return(raster_to_matrix(out))
+    }
     return(out)
   }
 
   # data.frame fallback (legacy)
   if (is.data.frame(dat)) {
-    if (by == "none") return(dat)
+    if (by == "none") {
+      return(dat)
+    }
     if (by == "drivers") {
       return(dat |>
         dplyr::select(-drivers) |>
@@ -258,11 +267,15 @@ layers_aggregate <- function(dat,
 #'   c("vc_cod.tif", "vc_salmon.tif"),
 #'   package = "rcea"
 #' )
-#' drivers <- terra::rast(drv_paths); names(drivers) <- c("shipping", "climate")
-#' vc <- terra::rast(vc_paths); names(vc) <- c("cod", "salmon")
+#' drivers <- terra::rast(drv_paths)
+#' names(drivers) <- c("shipping", "climate")
+#' vc <- terra::rast(vc_paths)
+#' names(vc) <- c("cod", "salmon")
 #' sens <- matrix(
-#'   c(0.8, 0.5,
-#'     0.2, 0.7),
+#'   c(
+#'     0.8, 0.5,
+#'     0.2, 0.7
+#'   ),
 #'   nrow = 2,
 #'   dimnames = list(c("cod", "salmon"), c("shipping", "climate"))
 #' )
@@ -325,8 +338,7 @@ layers_per_area <- function(dat,
 
   driver_cols <- setdiff(names(df), "vc")
   df[driver_cols] <- df[driver_cols] / vc_area[df$vc]
-  unit_obj <- switch(
-    area_unit,
+  unit_obj <- switch(area_unit,
     "km" = units::as_units(1, "km")^-2,
     "m" = units::as_units(1, "m")^-2,
     "ha" = units::as_units(1, "ha")^-1,
