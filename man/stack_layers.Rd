@@ -2,20 +2,51 @@
 % Please edit documentation in R/cube.R
 \name{stack_layers}
 \alias{stack_layers}
-\title{Stack layers into a SpatRaster}
+\title{Stack layers into SpatRaster objects}
 \usage{
-stack_layers(cube, layer_ids = NULL, cache = cube$config$cache$use_cache)
+stack_layers(
+  cube,
+  drivers_id = NULL,
+  vc_id = NULL,
+  catalog_dir = "catalog",
+  cache = FALSE,
+  cache_dir = "cache",
+  vrt_cache_dir = NULL,
+  cache_salt = NULL,
+  collect = FALSE
+)
 }
 \arguments{
 \item{cube}{rcea_cube}
 
-\item{layer_ids}{Optional vector of layer_ids to stack (default all)}
+\item{drivers_id}{Optional vector of driver layer_ids to stack}
+
+\item{vc_id}{Optional vector of valued component layer_ids to stack}
+
+\item{catalog_dir}{Base directory for relative paths in the catalog}
 
 \item{cache}{Use cache (logical)}
+
+\item{cache_dir}{Base cache directory}
+
+\item{vrt_cache_dir}{Optional VRT cache directory (defaults under cache_dir)}
+
+\item{cache_salt}{Optional salt for cache key}
+
+\item{collect}{Logical, if TRUE returns in-memory copies of stacks}
 }
 \value{
-SpatRaster
+rcea_cube with \code{stack} as a list of SpatRaster objects
 }
 \description{
-Stack layers into a SpatRaster
+Stack layers into SpatRaster objects
+}
+\examples{
+layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
+groups_path <- system.file("extdata/catalog/groups.yaml", package = "rcea")
+catalog <- load_catalog(layers_path, groups_path)
+cube <- make_cube(catalog)
+cube <- stack_layers(cube)
+names(cube$stack$drivers)
+names(cube$stack$vc)
 }

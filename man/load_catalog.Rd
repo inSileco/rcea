@@ -20,3 +20,11 @@ A list with \code{layers} tibble and \code{groups} list.
 \description{
 Load and validate catalog
 }
+\examples{
+layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
+groups_path <- system.file("extdata/catalog/groups.yaml", package = "rcea")
+catalog <- load_catalog(layers_path, groups_path)
+str(catalog, max.level = 1)
+catalog$layers$layer_id
+
+}

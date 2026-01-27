@@ -46,5 +46,6 @@ vc <- terra::rast(vc_paths)
 names(vc) <- c("cod", "salmon")
 expo <- exposure(drivers, vc, exportAs = "SpatRaster")
 expo
+names(expo)
 
 }

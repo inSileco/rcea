@@ -25,6 +25,7 @@
 #' names(vc) <- c("cod", "salmon")
 #' expo <- exposure(drivers, vc, exportAs = "SpatRaster")
 #' expo
+#' names(expo)
 #'
 #' @export
 exposure <- function(drivers,
@@ -59,6 +60,44 @@ exposure <- function(drivers,
   # ensure names are carried through
   names(exp_r) <- unlist(lapply(layers, names), use.names = FALSE)
   exp_r
+}
+
+#' Run exposure from a cube
+#'
+#' Convenience wrapper around `exposure()` that uses stacks stored in
+#' an `rcea_cube`.
+#'
+#' @param cube rcea_cube with `stack$drivers` and `stack$vc`.
+#' @param ... Additional arguments passed to `exposure()`.
+#'
+#' @examples
+#' layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
+#' groups_path <- system.file("extdata/catalog/groups.yaml", package = "rcea")
+#' catalog <- load_catalog(layers_path, groups_path)
+#' cube <- make_cube(catalog)
+#' cube <- stack_layers(cube)
+#' expo <- exposure_cube(cube)
+#' expo
+#'
+#' @export
+exposure_cube <- function(cube, ...) {
+  if (!inherits(cube, "rcea_cube")) stop("cube must be an rcea_cube.", call. = FALSE)
+  if (is.null(cube$stack)) stop("cube$stack is empty; call stack_layers() first.", call. = FALSE)
+
+  if (!is.null(cube$stack) && is.list(cube$stack)) {
+    drivers <- cube$stack$drivers
+    vc <- cube$stack$vc
+  } else if (inherits(cube$stack, "SpatRaster")) {
+    stop("cube$stack must include drivers and vc stacks; rebuild with stack_layers().", call. = FALSE)
+  } else {
+    stop("cube$stack must be a list with drivers and vc stacks.", call. = FALSE)
+  }
+
+  if (is.null(drivers) || is.null(vc)) {
+    stop("cube$stack must include both drivers and vc stacks.", call. = FALSE)
+  }
+
+  exposure(drivers, vc, ...)
 }
 
 # Internal alignment helper

@@ -15,3 +15,13 @@ SpatVector
 \description{
 Accepts sf object, bbox list, or WKT string and returns a terra SpatVector.
 }
+\examples{
+bbox_path <- system.file("extdata/aoi/bbox.yml", package = "rcea")
+bbox <- yaml::read_yaml(bbox_path)
+aoi1 <- normalize_aoi(bbox)
+aoi1
+
+geojson_path <- system.file("extdata/aoi/aoi.geojson", package = "rcea")
+aoi2 <- normalize_aoi(geojson_path)
+aoi2
+}

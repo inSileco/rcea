@@ -3,12 +3,29 @@
 #' @param layers Path to layers.csv
 #' @param groups Path to groups.yaml
 #' @return A list with `layers` tibble and `groups` list.
+#' @examples
+#' layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
+#' groups_path <- system.file("extdata/catalog/groups.yaml", package = "rcea")
+#' catalog <- load_catalog(layers_path, groups_path)
+#' str(catalog, max.level = 1)
+#' catalog$layers$layer_id
+#'
+#' @export
 load_catalog <- function(layers = file.path("catalog", "layers.csv"),
                          groups = file.path("catalog", "groups.yaml")) {
   if (!file.exists(layers)) stop("layers.csv not found at ", layers, call. = FALSE)
   if (!file.exists(groups)) stop("groups.yaml not found at ", groups, call. = FALSE)
 
   lay <- read.csv(layers, stringsAsFactors = FALSE)
+  if ("path" %in% names(lay)) {
+    is_remote <- grepl("^(http|https|s3|gs)://", lay$path)
+    is_abs <- grepl("^(/|[A-Za-z]:[\\\\/]|\\\\\\\\)", lay$path)
+    rel <- !is_remote & !is_abs
+    if (any(rel)) {
+      base_dir <- dirname(layers)
+      lay$path[rel] <- file.path(base_dir, lay$path[rel])
+    }
+  }
   grp <- yaml::read_yaml(groups)
 
   validate_catalog(lay, grp)

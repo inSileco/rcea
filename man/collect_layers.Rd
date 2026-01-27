@@ -14,3 +14,12 @@ collect_layers(cube, collect = FALSE)
 \description{
 Materialize stack to memory or return SpatRaster
 }
+\examples{
+layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
+groups_path <- system.file("extdata/catalog/groups.yaml", package = "rcea")
+catalog <- load_catalog(layers_path, groups_path)
+cube <- make_cube(catalog)
+cube <- stack_layers(cube)
+stacks <- collect_layers(cube, collect = FALSE)
+inherits(stacks$drivers, "SpatRaster")
+}

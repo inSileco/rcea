@@ -4,18 +4,34 @@
 \alias{make_cube}
 \title{Cube object constructor}
 \usage{
-make_cube(catalog, config, aoi = NULL)
+make_cube(catalog, aoi = NULL, sensitivity = NULL)
 }
 \arguments{
 \item{catalog}{List with layers/groups from \code{load_catalog()}}
 
-\item{config}{List from \code{load_config()}}
-
 \item{aoi}{Optional AOI (sf/bbox/WKT/SpatVector)}
+
+\item{sensitivity}{Optional vulnerability matrix for CEA}
 }
 \value{
 An object of class \code{rcea_cube}
 }
 \description{
 Cube object constructor
+}
+\examples{
+layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
+groups_path <- system.file("extdata/catalog/groups.yaml", package = "rcea")
+catalog <- load_catalog(layers_path, groups_path)
+sens <- matrix(
+  1,
+  nrow = 2,
+  ncol = 2,
+  dimnames = list(
+    c("vc_cod", "vc_salmon"),
+    c("pressure_shipping", "pressure_climate")
+  )
+)
+cube <- make_cube(catalog, sensitivity = sens)
+cube
 }

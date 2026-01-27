@@ -46,7 +46,7 @@ cea <- function(drivers,
                 cores = NULL,
                 filename = NULL,
                 engine = "matrix") {
-  engine <- match.arg(c("matrix", "terra"))
+  engine <- match.arg(engine, c("matrix", "terra"))
 
   # Align rasters if needed
   out_align <- align_pair(drivers, vc, align = align, template = template)
@@ -76,8 +76,8 @@ cea <- function(drivers,
   } else {
     # Combined stack to avoid building exposure separately
     stk <- c(vc, drivers)
-    nvc <- nlyr(vc)
-    ndr <- nlyr(drivers)
+    nvc <- terra::nlyr(vc)
+    ndr <- terra::nlyr(drivers)
     layer_names <- as.vector(outer(nmVC, nmDr, paste, sep = "_"))
 
     fun_ce <- function(x) {
@@ -142,4 +142,57 @@ get_cekm_cea <- function(dat, vc) {
 
   # Return
   dat
+}
+
+#' Run CEA from a cube
+#'
+#' Convenience wrapper around `cea()` that uses stacks and sensitivity stored in
+#' an `rcea_cube`.
+#'
+#' @param cube rcea_cube with `stack$drivers`, `stack$vc`, and optionally `sensitivity`.
+#' @param sensitivity Optional vulnerability matrix; overrides `cube$sensitivity` when provided.
+#' @param ... Additional arguments passed to `cea()`.
+#'
+#' @examples
+#' layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
+#' groups_path <- system.file("extdata/catalog/groups.yaml", package = "rcea")
+#' catalog <- load_catalog(layers_path, groups_path)
+#' sens <- matrix(
+#'   1,
+#'   nrow = 2,
+#'   ncol = 2,
+#'   dimnames = list(
+#'     c("vc_cod", "vc_salmon"),
+#'     c("pressure_shipping", "pressure_climate")
+#'   )
+#' )
+#' cube <- make_cube(catalog, sensitivity = sens)
+#' cube <- stack_layers(cube)
+#' ce <- cea_cube(cube, engine = "matrix")
+#' ce
+#'
+#' @export
+cea_cube <- function(cube, sensitivity = NULL, ...) {
+  if (!inherits(cube, "rcea_cube")) stop("cube must be an rcea_cube.", call. = FALSE)
+  if (is.null(cube$stack)) stop("cube$stack is empty; call stack_layers() first.", call. = FALSE)
+
+  if (!is.null(cube$stack) && is.list(cube$stack)) {
+    drivers <- cube$stack$drivers
+    vc <- cube$stack$vc
+  } else if (inherits(cube$stack, "SpatRaster")) {
+    stop("cube$stack must include drivers and vc stacks; rebuild with stack_layers().", call. = FALSE)
+  } else {
+    stop("cube$stack must be a list with drivers and vc stacks.", call. = FALSE)
+  }
+
+  if (is.null(drivers) || is.null(vc)) {
+    stop("cube$stack must include both drivers and vc stacks.", call. = FALSE)
+  }
+
+  if (is.null(sensitivity)) sensitivity <- cube$sensitivity
+  if (is.null(sensitivity)) {
+    stop("sensitivity not provided and cube$sensitivity is NULL.", call. = FALSE)
+  }
+
+  cea(drivers, vc, sensitivity, ...)
 }
