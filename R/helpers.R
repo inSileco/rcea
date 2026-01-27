@@ -4,9 +4,8 @@
 #'
 #' @param dat list of cea matrices or cea array
 #' @eval arguments(c("drivers","vc"))
-#'
+#' @noRd
 #' @describeIn helpers create array from list of cea matrices
-#' @export
 make_array <- function(dat) {
   unlist(dat) |>
     array(
@@ -26,8 +25,8 @@ make_array <- function(dat) {
 #' ========================================================================================
 #' ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #' ----------------------------------------------------------------------------------------
+#' @noRd
 #' @describeIn helpers create stars object from list of cea matrices or cea array
-#' @export
 make_stars <- function(dat, drivers, vc) {
   xy <- sf::st_coordinates(drivers)
   drNames <- names(drivers)
@@ -80,8 +79,8 @@ make_stars <- function(dat, drivers, vc) {
 # ==============================================================================
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ------------------------------------------------------------------------------
+#' @noRd
 #' @describeIn helpers create stars object from list of cea matrices or cea array
-#' @export
 make_stars2 <- function(dat, drivers, vc) {
   xy <- sf::st_coordinates(drivers)
   drNames <- names(drivers)
@@ -89,27 +88,27 @@ make_stars2 <- function(dat, drivers, vc) {
     vc = names(vc),
     vc_id = 1:length(vc)
   )
-      
+
   # For data exported in long format, from the ncea assessment
   # Get coordinates with repeated driver names
   xy$id_cell <- 1:nrow(xy)
-  
-  # Double loop to avoid crazy memory usage 
+
+  # Double loop to avoid crazy memory usage
   tmp <- list()
-  for(v in seq_len(nrow(vc_index))) {
+  for (v in seq_len(nrow(vc_index))) {
     dt <- dplyr::filter(dat, vc_id == v)
     tmp[[v]] <- dplyr::left_join(xy, dt, by = "id_cell") |>
-                dplyr::select(-id_cell, -vc_id) |>
-                stars::st_as_stars() |>
-                merge(name = "drivers")
+      dplyr::select(-id_cell, -vc_id) |>
+      stars::st_as_stars() |>
+      merge(name = "drivers")
   }
 
   # Single stars object
-  dat <- do.call("c", c(tmp , along = "vc")) |>
+  dat <- do.call("c", c(tmp, along = "vc")) |>
     split("vc") |>
     setNames(vc_index$vc)
-  
-  # Return 
+
+  # Return
   dat
 }
 

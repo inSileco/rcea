@@ -3,7 +3,7 @@
 #' Package to perform cumulative effects assessments.
 #'
 #' @keywords internal
-#' 
+#'
 #' @importFrom cli symbol
 #' @importFrom glue glue
 #' @importFrom grDevices dev.off png colorRampPalette
@@ -42,8 +42,7 @@ use_template <- function(template, save_as = stdout(), pkg = "rcea", ...) {
 #' Check if folder exists and create if not
 #'
 #' @param path path of folder to use as output, create if it does not already exist
-#'
-#' @export
+#' @noRd
 chk_create <- function(path) {
   if (!file.exists(path)) dir.create(path, recursive = TRUE)
 }

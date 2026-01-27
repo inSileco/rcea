@@ -90,7 +90,6 @@ ncea <- function(drivers, vc, sensitivity, metaweb, trophic_sensitivity, w_d = 0
 #' ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #' ----------------------------------------------------------------------------------------
 #' @describeIn ncea transform effects assessment into binary 2D matrix to assess the presence of an effect to a valued component in a specific grid cell
-#' @export
 #' @param effect TODO
 cea_binary <- function(effect) {
   (effect / effect) |>
@@ -168,7 +167,6 @@ triads <- function(metaweb, trophic_sensitivity) {
 #' ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #' ----------------------------------------------------------------------------------------
 #' @describeIn ncea pathways of direct effect
-#' @export
 cea_pathways <- function(effect, vc) {
   # Binary effects (for pathways)
   bin <- cea_binary(effect)
