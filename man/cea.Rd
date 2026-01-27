@@ -2,7 +2,6 @@
 % Please edit documentation in R/cea.R
 \name{cea}
 \alias{cea}
-\alias{get_cekm_cea}
 \title{Cumulative effects assessments}
 \usage{
 cea(
@@ -16,8 +15,6 @@ cea(
   filename = NULL,
   engine = "matrix"
 )
-
-get_cekm_cea(dat, vc)
 }
 \arguments{
 \item{drivers}{distribution and intensity of environmental drivers as stars object}
@@ -26,7 +23,7 @@ get_cekm_cea(dat, vc)
 
 \item{sensitivity}{matrix of environmental drivers and valued component, with same name as those used in \code{drivers} and \code{vc}}
 
-\item{exportAs}{string, "SpatRaster".}
+\item{exportAs}{string, "SpatRaster" or "matrix".}
 
 \item{align}{alignment policy, one of "error", "reproject", "template".}
 
@@ -37,17 +34,10 @@ get_cekm_cea(dat, vc)
 \item{filename}{optional path to write the output raster stack (useful for large jobs).}
 
 \item{engine}{calculation engine, one of "matrix" (fast, in-memory) or "terra" (streaming/chunked).}
-
-\item{dat}{TODO}
 }
 \description{
 Assessment of cumulative effects using the Halpern et al. 2008 method.
 }
-\section{Functions}{
-\itemize{
-\item \code{get_cekm_cea()}: get effects per km2
-
-}}
 \examples{
 drv_paths <- system.file(
   "extdata/rasters",

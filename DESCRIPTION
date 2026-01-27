@@ -44,6 +44,7 @@ Imports:
     stringr,
     terra,
     tidyr,
+    units,
     vroom,
     whisker,
     yaml

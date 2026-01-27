@@ -37,6 +37,15 @@ test_that("exposure returns expected layers and values", {
   expect_equal(out, expected)
 })
 
+test_that("exposure supports matrix export", {
+  dat <- make_exposure_rasters()
+  expo_mat <- exposure(dat$drivers, dat$vc, exportAs = "matrix")
+
+  expect_true(is.matrix(expo_mat))
+  expect_equal(colnames(expo_mat), c("cod_shipping", "salmon_shipping", "cod_climate", "salmon_climate"))
+  expect_true(inherits(attr(expo_mat, "template"), "SpatRaster"))
+})
+
 test_that("exposure errors on misaligned rasters when align = 'error'", {
   dat <- make_exposure_rasters()
   vc2 <- terra::rast(ncols = 2, nrows = 2, xmin = 0, xmax = 4, ymin = 0, ymax = 4, crs = "EPSG:3857")

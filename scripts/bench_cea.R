@@ -29,7 +29,7 @@ cea_matrix <- function(drivers, vc, sensitivity) {
 # Terra-based CEA (using package functions)
 cea_terra <- function(drivers, vc, sensitivity, cores = NULL, filename = NULL, engine = "terra") {
   ce <- cea(drivers, vc, sensitivity, exportAs = "SpatRaster", cores = cores, filename = filename, engine = engine)
-  cea_extract(ce, cumul_fun = "full")
+  layers_aggregate(ce, by = "both")
 }
 
 run_case <- function(side, ndr, nvc) {

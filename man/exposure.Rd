@@ -7,7 +7,7 @@
 exposure(
   drivers,
   vc,
-  exportAs = c("SpatRaster"),
+  exportAs = c("SpatRaster", "matrix"),
   align = "error",
   template = NULL,
   cores = NULL
@@ -18,7 +18,7 @@ exposure(
 
 \item{vc}{distribution of valued components as stars object}
 
-\item{exportAs}{string, "SpatRaster" (stack of layers).}
+\item{exportAs}{string, "SpatRaster" (stack of layers) or "matrix".}
 
 \item{align}{alignment policy, one of "error", "reproject", "template".}
 

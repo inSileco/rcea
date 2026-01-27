@@ -47,6 +47,19 @@ test_that("cea matrix engine returns expected layers and values", {
   expect_equal(out, expected)
 })
 
+test_that("cea supports matrix export", {
+  dat <- make_test_rasters()
+  ce_mat <- cea(dat$drivers, dat$vc, dat$sensitivity, exportAs = "matrix", engine = "matrix")
+
+  expect_true(is.matrix(ce_mat))
+  expect_equal(colnames(ce_mat), c("cod_shipping", "salmon_shipping", "cod_climate", "salmon_climate"))
+  expect_true(inherits(attr(ce_mat, "template"), "SpatRaster"))
+
+  ce_r <- rcea:::matrix_to_raster(ce_mat, attr(ce_mat, "template"), colnames(ce_mat))
+  attr(ce_mat, "template") <- NULL
+  expect_equal(unname(terra::values(ce_r, mat = TRUE)), unname(ce_mat))
+})
+
 test_that("cea reorders sensitivity by names", {
   dat <- make_test_rasters()
   sens_rev <- dat$sensitivity[c("salmon", "cod"), c("climate", "shipping")]

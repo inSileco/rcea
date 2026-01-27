@@ -3,7 +3,7 @@
 #' Assessment of the exposure (i.e. overlap) between valued components and environmental drivers in the context of cumulative effects assessments.
 #'
 #' @eval arguments(c("drivers","vc"))
-#' @param exportAs string, "SpatRaster" (stack of layers).
+#' @param exportAs string, "SpatRaster" (stack of layers) or "matrix".
 #' @param align alignment policy, one of "error", "reproject", "template".
 #' @param template optional SpatRaster to align to when `align = "template"`.
 #' @param cores number of threads for terra::app (default uses terraOptions).
@@ -30,7 +30,7 @@
 #' @export
 exposure <- function(drivers,
                      vc,
-                     exportAs = c("SpatRaster"),
+                     exportAs = c("SpatRaster", "matrix"),
                      align = "error",
                      template = NULL,
                      cores = NULL) {
@@ -43,23 +43,37 @@ exposure <- function(drivers,
   dr_names <- names(drivers)
   vc_names <- names(vc)
 
-  # Compute overlap for each driver with all vc
-  exp_list <- lapply(seq_along(dr_names), function(i) {
-    r <- vc * drivers[[i]]
-    names(r) <- vc_names
-    r
-  })
-  names(exp_list) <- dr_names
+  if (exportAs == "matrix") {
+    dr_mat <- terra::values(drivers, mat = TRUE)
+    vc_mat <- terra::values(vc, mat = TRUE)
+    out_mat <- NULL
+    for (j in seq_along(dr_names)) {
+      exp_j <- vc_mat * dr_mat[, j]
+      out_mat <- cbind(out_mat, exp_j)
+    }
+    layer_names <- as.vector(outer(vc_names, dr_names, paste, sep = "_"))
+    colnames(out_mat) <- layer_names
+    out_mat <- with_template(out_mat, drivers[[1]])
+    out_mat
+  } else {
+    # Compute overlap for each driver with all vc
+    exp_list <- lapply(seq_along(dr_names), function(i) {
+      r <- vc * drivers[[i]]
+      names(r) <- vc_names
+      r
+    })
+    names(exp_list) <- dr_names
 
-  # Stack all exposures with layer names vc_driver
-  layers <- mapply(function(r, dr) {
-    names(r) <- paste0(names(r), "_", dr)
-    r
-  }, exp_list, names(exp_list), SIMPLIFY = FALSE)
-  exp_r <- terra::rast(layers)
-  # ensure names are carried through
-  names(exp_r) <- unlist(lapply(layers, names), use.names = FALSE)
-  exp_r
+    # Stack all exposures with layer names vc_driver
+    layers <- mapply(function(r, dr) {
+      names(r) <- paste0(names(r), "_", dr)
+      r
+    }, exp_list, names(exp_list), SIMPLIFY = FALSE)
+    exp_r <- terra::rast(layers)
+    # ensure names are carried through
+    names(exp_r) <- unlist(lapply(layers, names), use.names = FALSE)
+    exp_r
+  }
 }
 
 #' Run exposure from a cube

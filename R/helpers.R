@@ -112,3 +112,27 @@ make_stars2 <- function(dat, drivers, vc) {
   # Return 
   dat
 }
+
+# ------------------------------------------------------------------------------
+# Internal helpers for matrix <-> raster conversions
+matrix_to_raster <- function(mat, template, layer_names = NULL) {
+  if (inherits(template, "SpatRaster") && terra::nlyr(template) > 1) {
+    template <- template[[1]]
+  }
+  r <- terra::rast(template, nlyrs = ncol(mat))
+  terra::values(r) <- mat
+  if (!is.null(layer_names)) names(r) <- layer_names
+  r
+}
+
+raster_to_matrix <- function(r) {
+  mat <- terra::values(r, mat = TRUE)
+  colnames(mat) <- names(r)
+  attr(mat, "template") <- if (terra::nlyr(r) > 1) r[[1]] else r
+  mat
+}
+
+with_template <- function(mat, template) {
+  attr(mat, "template") <- template
+  mat
+}
