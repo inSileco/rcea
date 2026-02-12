@@ -1,7 +1,7 @@
 Package: rcea
 Type: Package
 Title: Spatially-explicit cumulative effects assessments in R
-Version: 1.0.0
+Version: 1.2.0
 Authors@R: c(
   person(
     given   = "David",
