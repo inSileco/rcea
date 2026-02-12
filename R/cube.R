@@ -46,6 +46,8 @@ make_cube <- function(catalog, aoi = NULL, sensitivity = NULL) {
 #' @param vrt_cache_dir Optional VRT cache directory (defaults under cache_dir)
 #' @param cache_salt Optional salt for cache key
 #' @param collect Logical, if TRUE returns in-memory copies of stacks
+#' @param align alignment policy, one of "error", "reproject", "template"
+#' @param template optional SpatRaster used when `align = "template"`
 #' @return rcea_cube with `stack` as a list of SpatRaster objects
 #' @examples
 #' layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
@@ -64,7 +66,11 @@ stack_layers <- function(cube,
                          cache_dir = "cache",
                          vrt_cache_dir = NULL,
                          cache_salt = NULL,
-                         collect = FALSE) {
+                         collect = FALSE,
+                         align = "error",
+                         template = NULL) {
+  align <- match.arg(align, c("error", "reproject", "template"))
+
   lay <- cube$catalog$layers
   if (is.null(drivers_id) && is.null(vc_id)) {
     drivers_id <- lay$layer_id[lay$type %in% "pressure"]
@@ -105,15 +111,36 @@ stack_layers <- function(cube,
       vrt_path <- NULL
     }
 
-    if (!is.null(vrt_path) && file.exists(vrt_path)) {
+    if (!is.null(vrt_path) && file.exists(vrt_path) && align == "error") {
       r <- terra::vrt(vrt_path)
     } else {
-      r <- terra::rast(files)
-      if (!is.null(cube$aoi)) {
-        r <- terra::crop(r, cube$aoi)
-        r <- terra::mask(r, cube$aoi)
+      if (align == "error") {
+        r <- terra::rast(files)
+      } else {
+        target <- if (align == "template") template else terra::rast(files[1])
+        if (is.null(target)) {
+          stop("Template required when align = 'template'.", call. = FALSE)
+        }
+
+        r_list <- lapply(files, function(f) {
+          ri <- terra::rast(f)
+          if (!isTRUE(terra::compareGeom(ri, target, stopOnError = FALSE))) {
+            ri <- terra::project(ri, target)
+          }
+          ri
+        })
+        r <- terra::rast(r_list)
       }
-      if (!is.null(vrt_path)) {
+
+      if (!is.null(cube$aoi)) {
+        aoi <- cube$aoi
+        if (!isTRUE(terra::same.crs(r, aoi))) {
+          aoi <- terra::project(aoi, r)
+        }
+        r <- terra::crop(r, aoi)
+        r <- terra::mask(r, aoi)
+      }
+      if (!is.null(vrt_path) && align == "error") {
         terra::vrt(r, filename = vrt_path, overwrite = TRUE)
         r <- terra::vrt(vrt_path)
       }
@@ -124,6 +151,12 @@ stack_layers <- function(cube,
 
   drivers_stack <- build_stack(lay_dr, "drivers")
   vc_stack <- build_stack(lay_vc, "vc")
+
+  if (!is.null(drivers_stack) && !is.null(vc_stack)) {
+    aligned <- align_pair(drivers_stack, vc_stack, align = align, template = template)
+    drivers_stack <- aligned$drivers
+    vc_stack <- aligned$vc
+  }
 
   cube$stack <- list(drivers = drivers_stack, vc = vc_stack)
   if (collect) {

@@ -86,3 +86,69 @@ test_that("stack_layers supports collect argument", {
   expect_true(inherits(cube$stack$drivers, "SpatRaster"))
   expect_true(inherits(cube$stack$vc, "SpatRaster"))
 })
+
+test_that("stack_layers aligns to template when requested", {
+  td <- tempdir()
+  r1 <- terra::rast(ncols = 4, nrows = 4, xmin = 0, xmax = 4, ymin = 0, ymax = 4, crs = "EPSG:3857")
+  r2 <- terra::rast(ncols = 8, nrows = 8, xmin = 0, xmax = 8, ymin = 0, ymax = 8, crs = "EPSG:3857")
+  r3 <- terra::rast(ncols = 6, nrows = 6, xmin = 1, xmax = 7, ymin = 1, ymax = 7, crs = "EPSG:3857")
+  terra::values(r1) <- 1
+  terra::values(r2) <- 2
+  terra::values(r3) <- 3
+
+  p1 <- file.path(td, "dr1.tif")
+  p2 <- file.path(td, "dr2.tif")
+  p3 <- file.path(td, "vc1.tif")
+  terra::writeRaster(r1, p1, overwrite = TRUE)
+  terra::writeRaster(r2, p2, overwrite = TRUE)
+  terra::writeRaster(r3, p3, overwrite = TRUE)
+
+  catalog <- list(
+    layers = data.frame(
+      layer_id = c("shipping", "climate", "cod"),
+      path = c(p1, p2, p3),
+      type = c("pressure", "pressure", "vc"),
+      stringsAsFactors = FALSE
+    ),
+    groups = list()
+  )
+  cube <- make_cube(catalog)
+  tmpl <- terra::rast(ncols = 5, nrows = 5, xmin = 0, xmax = 5, ymin = 0, ymax = 5, crs = "EPSG:3857")
+  cube <- stack_layers(cube, align = "template", template = tmpl)
+
+  expect_true(isTRUE(terra::compareGeom(cube$stack$drivers, tmpl, stopOnError = FALSE)))
+  expect_true(isTRUE(terra::compareGeom(cube$stack$vc, tmpl, stopOnError = FALSE)))
+})
+
+test_that("stack_layers errors on misaligned rasters when align = 'error'", {
+  td <- tempdir()
+  r1 <- terra::rast(ncols = 4, nrows = 4, xmin = 0, xmax = 4, ymin = 0, ymax = 4, crs = "EPSG:3857")
+  r2 <- terra::rast(ncols = 8, nrows = 8, xmin = 0, xmax = 8, ymin = 0, ymax = 8, crs = "EPSG:3857")
+  r3 <- terra::rast(ncols = 6, nrows = 6, xmin = 1, xmax = 7, ymin = 1, ymax = 7, crs = "EPSG:3857")
+  terra::values(r1) <- 1
+  terra::values(r2) <- 2
+  terra::values(r3) <- 3
+
+  p1 <- file.path(td, "dr1_error.tif")
+  p2 <- file.path(td, "dr2_error.tif")
+  p3 <- file.path(td, "vc1_error.tif")
+  terra::writeRaster(r1, p1, overwrite = TRUE)
+  terra::writeRaster(r2, p2, overwrite = TRUE)
+  terra::writeRaster(r3, p3, overwrite = TRUE)
+
+  catalog <- list(
+    layers = data.frame(
+      layer_id = c("shipping", "climate", "cod"),
+      path = c(p1, p2, p3),
+      type = c("pressure", "pressure", "vc"),
+      stringsAsFactors = FALSE
+    ),
+    groups = list()
+  )
+  cube <- make_cube(catalog)
+
+  expect_error(
+    stack_layers(cube, align = "error"),
+    "extents do not match"
+  )
+})

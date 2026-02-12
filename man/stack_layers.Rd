@@ -13,7 +13,9 @@ stack_layers(
   cache_dir = "cache",
   vrt_cache_dir = NULL,
   cache_salt = NULL,
-  collect = FALSE
+  collect = FALSE,
+  align = "error",
+  template = NULL
 )
 }
 \arguments{
@@ -34,6 +36,10 @@ stack_layers(
 \item{cache_salt}{Optional salt for cache key}
 
 \item{collect}{Logical, if TRUE returns in-memory copies of stacks}
+
+\item{align}{alignment policy, one of "error", "reproject", "template"}
+
+\item{template}{optional SpatRaster used when \code{align = "template"}}
 }
 \value{
 rcea_cube with \code{stack} as a list of SpatRaster objects
