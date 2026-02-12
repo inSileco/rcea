@@ -19,8 +19,8 @@ test_that("make_cube stores catalog, aoi, and sensitivity", {
     nrow = 2,
     ncol = 2,
     dimnames = list(
-      c("vc_cod", "vc_salmon"),
-      c("pressure_shipping", "pressure_climate")
+      c("cod", "salmon"),
+      c("shipping", "climate")
     )
   )
 

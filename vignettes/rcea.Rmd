@@ -8,12 +8,126 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE,
-                      comment  = "#>")
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
 ```
-
 
 ```{r setup}
 library(rcea)
 ```
 
+# Halpern CEA workflow
+
+This vignette focuses on the Halpern et al. (2008) cumulative effects assessment (CEA) method using the updated `rcea` workflow. The examples use the built‑in example rasters in `inst/extdata`.
+
+## Data preparation
+
+You can use the catalog + cube helpers to keep workflows consistent and reproducible.
+
+```{r}
+layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
+groups_path <- system.file("extdata/catalog/groups.yaml", package = "rcea")
+
+catalog <- load_catalog(layers_path, groups_path)
+
+# Sensitivity matrix must match VC (rows) and driver (cols) names
+sens <- matrix(
+  c(
+    0.8, 0.5,
+    0.2, 0.7
+  ),
+  nrow = 2,
+  dimnames = list(
+    c("cod", "salmon"),
+    c("shipping", "climate")
+  )
+)
+
+cube <- make_cube(catalog, sensitivity = sens)
+cube <- stack_layers(cube)
+
+cube
+```
+
+At this point you have two stacks:
+
+```{r}
+names(cube$stack$drivers)
+names(cube$stack$vc)
+```
+
+## CEA (Halpern) analysis
+
+Compute cumulative effects with the fast matrix engine (default):
+
+```{r}
+ce <- cea(cube$stack$drivers, cube$stack$vc, cube$sensitivity)
+ce
+```
+
+## Exposure (overlap)
+
+```{r}
+expo <- exposure(cube$stack$drivers, cube$stack$vc)
+expo
+```
+
+## Post‑processing: extract and aggregate layers
+
+The post‑processing helpers work on both `SpatRaster` outputs and matrix outputs.
+
+### Extract (subset) layers
+
+```{r}
+# Keep only one driver (use catalog-driven names)
+driver_keep <- names(cube$stack$drivers)[1]
+shipping_only <- layers_extract(ce, drivers = driver_keep)
+shipping_only
+```
+
+### Aggregate layers
+
+```{r}
+# Aggregate all selected layers into one
+cea_total <- layers_aggregate(ce, by = "both")
+cea_total
+terra::plot(cea_total)
+
+# Aggregate over drivers (one layer per VC)
+cea_by_vc <- layers_aggregate(ce, by = "drivers")
+cea_by_vc
+terra::plot(cea_by_vc)
+```
+
+You can also change the aggregation function (e.g., mean):
+
+```{r}
+cea_by_vc_mean <- layers_aggregate(ce, by = "drivers", fun = "mean")
+cea_by_vc_mean
+terra::plot(cea_by_vc_mean)
+```
+
+## Per‑area effects
+
+`layers_per_area()` computes per‑area effects using true cell sizes and returns `units` columns.
+
+```{r}
+cea_per_area <- layers_per_area(ce, cube$stack$vc)
+cea_per_area
+```
+
+## Matrix output (optional)
+
+If you want fast aggregation without repeated raster I/O, you can work in matrix space and reconstruct rasters only when needed.
+
+```{r}
+ce_mat <- cea(cube$stack$drivers, cube$stack$vc, cube$sensitivity, exportAs = "matrix")
+
+# Aggregate in matrix space
+cea_by_vc_mat <- layers_aggregate(ce_mat, by = "drivers", exportAs = "matrix")
+head(cea_by_vc_mat)
+```

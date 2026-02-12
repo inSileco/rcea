@@ -28,10 +28,12 @@ make_test_rasters <- function() {
 test_that("cea matrix engine returns expected layers and values", {
   dat <- make_test_rasters()
   ce <- cea(dat$drivers, dat$vc, dat$sensitivity, engine = "matrix")
+  ce_r <- ce$data
 
-  expect_true(inherits(ce, "SpatRaster"))
-  expect_equal(terra::nlyr(ce), 4)
-  expect_equal(names(ce), c("cod_shipping", "salmon_shipping", "cod_climate", "salmon_climate"))
+  expect_true(inherits(ce, "rcea_result"))
+  expect_true(inherits(ce_r, "SpatRaster"))
+  expect_equal(terra::nlyr(ce_r), 4)
+  expect_equal(names(ce_r), c("cod_shipping", "salmon_shipping", "cod_climate", "salmon_climate"))
 
   dr_mat <- terra::values(dat$drivers, mat = TRUE)
   vc_mat <- terra::values(dat$vc, mat = TRUE)
@@ -41,23 +43,28 @@ test_that("cea matrix engine returns expected layers and values", {
   eff1 <- sweep(exp1, 2, dat$sensitivity[, 1], `*`)
   eff2 <- sweep(exp2, 2, dat$sensitivity[, 2], `*`)
   expected <- cbind(eff1, eff2)
-  colnames(expected) <- names(ce)
+  colnames(expected) <- names(ce_r)
 
-  out <- terra::values(ce, mat = TRUE)
+  out <- terra::values(ce_r, mat = TRUE)
   expect_equal(out, expected)
 })
 
 test_that("cea supports matrix export", {
   dat <- make_test_rasters()
   ce_mat <- cea(dat$drivers, dat$vc, dat$sensitivity, exportAs = "matrix", engine = "matrix")
+  ce_data <- ce_mat$data
 
-  expect_true(is.matrix(ce_mat))
-  expect_equal(colnames(ce_mat), c("cod_shipping", "salmon_shipping", "cod_climate", "salmon_climate"))
-  expect_true(inherits(attr(ce_mat, "template"), "SpatRaster"))
+  expect_true(inherits(ce_mat, "rcea_result"))
+  expect_true(is.matrix(ce_data))
+  expect_equal(colnames(ce_data), c("cod_shipping", "salmon_shipping", "cod_climate", "salmon_climate"))
+  expect_true(inherits(attr(ce_data, "template"), "SpatRaster"))
 
-  ce_r <- rcea:::matrix_to_raster(ce_mat, attr(ce_mat, "template"), colnames(ce_mat))
-  attr(ce_mat, "template") <- NULL
-  expect_equal(unname(terra::values(ce_r, mat = TRUE)), unname(ce_mat))
+  ce_r <- rcea:::matrix_to_raster(ce_data, attr(ce_data, "template"), colnames(ce_data))
+  attr(ce_data, "template") <- NULL
+  attr(ce_data, "layer_map") <- NULL
+  out <- unname(terra::values(ce_r, mat = TRUE))
+  attr(out, "layer_map") <- NULL
+  expect_equal(out, unname(ce_data))
 })
 
 test_that("cea reorders sensitivity by names", {
@@ -67,7 +74,7 @@ test_that("cea reorders sensitivity by names", {
   ce1 <- cea(dat$drivers, dat$vc, dat$sensitivity, engine = "matrix")
   ce2 <- cea(dat$drivers, dat$vc, sens_rev, engine = "matrix")
 
-  expect_equal(terra::values(ce1, mat = TRUE), terra::values(ce2, mat = TRUE))
+  expect_equal(terra::values(ce1$data, mat = TRUE), terra::values(ce2$data, mat = TRUE))
 })
 
 test_that("cea terra engine matches matrix engine on small raster", {
@@ -75,7 +82,7 @@ test_that("cea terra engine matches matrix engine on small raster", {
   ce_mat <- cea(dat$drivers, dat$vc, dat$sensitivity, engine = "matrix")
   ce_terra <- cea(dat$drivers, dat$vc, dat$sensitivity, engine = "terra")
 
-  expect_equal(terra::values(ce_mat, mat = TRUE), terra::values(ce_terra, mat = TRUE))
+  expect_equal(terra::values(ce_mat$data, mat = TRUE), terra::values(ce_terra$data, mat = TRUE))
 })
 
 test_that("cea errors on misaligned rasters when align = 'error'", {
@@ -104,8 +111,8 @@ test_that("cea_cube uses cube stacks and sensitivity", {
     nrow = 2,
     ncol = 2,
     dimnames = list(
-      c("vc_cod", "vc_salmon"),
-      c("pressure_shipping", "pressure_climate")
+      c("cod", "salmon"),
+      c("shipping", "climate")
     )
   )
   cube <- make_cube(catalog, sensitivity = sens)
@@ -114,5 +121,5 @@ test_that("cea_cube uses cube stacks and sensitivity", {
   ce1 <- cea(cube$stack$drivers, cube$stack$vc, cube$sensitivity, engine = "matrix")
   ce2 <- cea_cube(cube, engine = "matrix")
 
-  expect_equal(terra::values(ce1, mat = TRUE), terra::values(ce2, mat = TRUE))
+  expect_equal(terra::values(ce1$data, mat = TRUE), terra::values(ce2$data, mat = TRUE))
 })

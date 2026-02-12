@@ -91,7 +91,7 @@ terra::writeRaster(mask_study_area,   file.path(paths$raster_dir, "mask_study_ar
 # Catalog layers.csv
 res_vals <- terra::res(r_template)
 layers <- data.frame(
-  layer_id       = c("pressure_shipping", "pressure_climate", "vc_cod", "vc_salmon", "mask_study_area"),
+  layer_id       = c("shipping", "climate", "cod", "salmon", "mask_study_area"),
   path           = file.path("inst", "extdata", "rasters",
                              c("pressure_shipping.tif", "pressure_climate.tif", "vc_cod.tif", "vc_salmon.tif", "mask_study_area.tif")),
   type           = c("pressure", "pressure", "vc", "vc", "aux"),
@@ -114,11 +114,11 @@ write.csv(layers, paths$layers_csv, row.names = FALSE)
 # groups.yaml
 groups <- list(
   pressure = list(
-    shipping = list(members = c("pressure_shipping")),
-    climate  = list(members = c("pressure_climate"))
+    shipping = list(members = c("shipping")),
+    climate  = list(members = c("climate"))
   ),
   vc = list(
-    fish = list(members = c("vc_cod", "vc_salmon"))
+    fish = list(members = c("cod", "salmon"))
   ),
   aux = list(
     mask = list(members = c("mask_study_area"))

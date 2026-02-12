@@ -9,7 +9,7 @@ test_that("load_catalog validates structure and paths", {
   groups_path <- file.path(tmp, "groups.yaml")
 
   layers <- data.frame(
-    layer_id = "pressure_shipping",
+    layer_id = "shipping",
     path = tif,
     type = "pressure",
     group = "shipping",
@@ -21,13 +21,13 @@ test_that("load_catalog validates structure and paths", {
   )
   write.csv(layers, layers_path, row.names = FALSE)
 
-  groups <- list(pressure = list(shipping = list(members = "pressure_shipping")))
+  groups <- list(pressure = list(shipping = list(members = "shipping")))
   yaml::write_yaml(groups, groups_path)
 
   out <- load_catalog(layers_path, groups_path)
   expect_true(is.list(out))
   expect_true(all(c("layers", "groups") %in% names(out)))
-  expect_equal(out$layers$layer_id, "pressure_shipping")
+  expect_equal(out$layers$layer_id, "shipping")
 })
 
 test_that("validate_catalog flags bad inputs", {

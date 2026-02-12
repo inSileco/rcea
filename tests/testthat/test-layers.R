@@ -32,7 +32,7 @@ test_that("layers_aggregate defaults to full aggregation (both)", {
   res <- layers_aggregate(ce_mat)
   expect_true(inherits(res, "SpatRaster"))
 
-  expected <- rowSums(ce_mat, na.rm = TRUE)
+  expected <- rowSums(ce_mat$data, na.rm = TRUE)
   out <- terra::values(res, mat = TRUE)
   expect_equal(out[, 1], expected)
 })
@@ -44,9 +44,10 @@ test_that("layers_aggregate supports VC aggregation on matrix", {
   res <- layers_aggregate(ce_mat, by = "drivers", exportAs = "matrix")
 
   expected <- cbind(
-    cod = rowSums(ce_mat[, c("cod_shipping", "cod_climate")], na.rm = TRUE),
-    salmon = rowSums(ce_mat[, c("salmon_shipping", "salmon_climate")], na.rm = TRUE)
+    cod = rowSums(ce_mat$data[, c("cod_shipping", "cod_climate")], na.rm = TRUE),
+    salmon = rowSums(ce_mat$data[, c("salmon_shipping", "salmon_climate")], na.rm = TRUE)
   )
+  attr(res, "layer_map") <- NULL
   attr(res, "template") <- NULL
   dimnames(res) <- NULL
   dimnames(expected) <- NULL
@@ -66,7 +67,8 @@ test_that("layers_aggregate supports mean on matrix", {
   ce_mat <- cea(dat$drivers, dat$vc, dat$sensitivity, exportAs = "matrix", engine = "matrix")
 
   res <- layers_aggregate(ce_mat, by = "both", fun = "mean", exportAs = "matrix")
-  expected <- matrix(rowMeans(ce_mat, na.rm = TRUE), ncol = 1)
+  expected <- matrix(rowMeans(ce_mat$data, na.rm = TRUE), ncol = 1)
+  attr(res, "layer_map") <- NULL
   attr(res, "template") <- NULL
   dimnames(res) <- NULL
   dimnames(expected) <- NULL

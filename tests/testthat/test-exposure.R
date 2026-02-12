@@ -21,9 +21,11 @@ make_exposure_rasters <- function() {
 test_that("exposure returns expected layers and values", {
   dat <- make_exposure_rasters()
   expo <- exposure(dat$drivers, dat$vc, exportAs = "SpatRaster")
+  expo_r <- expo$data
 
-  expect_true(inherits(expo, "SpatRaster"))
-  expect_equal(names(expo), c("cod_shipping", "salmon_shipping", "cod_climate", "salmon_climate"))
+  expect_true(inherits(expo, "rcea_result"))
+  expect_true(inherits(expo_r, "SpatRaster"))
+  expect_equal(names(expo_r), c("cod_shipping", "salmon_shipping", "cod_climate", "salmon_climate"))
 
   dr_mat <- terra::values(dat$drivers, mat = TRUE)
   vc_mat <- terra::values(dat$vc, mat = TRUE)
@@ -31,19 +33,21 @@ test_that("exposure returns expected layers and values", {
   exp1 <- vc_mat * dr_mat[, 1]
   exp2 <- vc_mat * dr_mat[, 2]
   expected <- cbind(exp1, exp2)
-  colnames(expected) <- names(expo)
+  colnames(expected) <- names(expo_r)
 
-  out <- terra::values(expo, mat = TRUE)
+  out <- terra::values(expo_r, mat = TRUE)
   expect_equal(out, expected)
 })
 
 test_that("exposure supports matrix export", {
   dat <- make_exposure_rasters()
   expo_mat <- exposure(dat$drivers, dat$vc, exportAs = "matrix")
+  expo_data <- expo_mat$data
 
-  expect_true(is.matrix(expo_mat))
-  expect_equal(colnames(expo_mat), c("cod_shipping", "salmon_shipping", "cod_climate", "salmon_climate"))
-  expect_true(inherits(attr(expo_mat, "template"), "SpatRaster"))
+  expect_true(inherits(expo_mat, "rcea_result"))
+  expect_true(is.matrix(expo_data))
+  expect_equal(colnames(expo_data), c("cod_shipping", "salmon_shipping", "cod_climate", "salmon_climate"))
+  expect_true(inherits(attr(expo_data, "template"), "SpatRaster"))
 })
 
 test_that("exposure errors on misaligned rasters when align = 'error'", {
@@ -67,10 +71,11 @@ test_that("exposure aligns with template", {
   names(vc2) <- names(dat$vc)
 
   expo <- exposure(dat$drivers, vc2, align = "template", template = dat$drivers[[1]])
+  expo_r <- expo$data
 
-  expect_equal(terra::ncell(expo), terra::ncell(dat$drivers[[1]]))
-  expect_equal(terra::res(expo), terra::res(dat$drivers[[1]]))
-  expect_equal(as.vector(terra::ext(expo)), as.vector(terra::ext(dat$drivers[[1]])))
+  expect_equal(terra::ncell(expo_r), terra::ncell(dat$drivers[[1]]))
+  expect_equal(terra::res(expo_r), terra::res(dat$drivers[[1]]))
+  expect_equal(as.vector(terra::ext(expo_r)), as.vector(terra::ext(dat$drivers[[1]])))
 })
 
 test_that("exposure_cube matches exposure", {
@@ -87,5 +92,5 @@ test_that("exposure_cube matches exposure", {
   expo1 <- exposure(cube$stack$drivers, cube$stack$vc)
   expo2 <- exposure_cube(cube)
 
-  expect_equal(terra::values(expo1, mat = TRUE), terra::values(expo2, mat = TRUE))
+  expect_equal(terra::values(expo1$data, mat = TRUE), terra::values(expo2$data, mat = TRUE))
 })

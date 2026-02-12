@@ -43,6 +43,10 @@ exposure <- function(drivers,
   dr_names <- names(drivers)
   vc_names <- names(vc)
 
+  layer_info <- build_layer_map(drivers, vc)
+  layer_names <- layer_info$layer_names
+  layer_map <- layer_info$layer_map
+
   if (exportAs == "matrix") {
     dr_mat <- terra::values(drivers, mat = TRUE)
     vc_mat <- terra::values(vc, mat = TRUE)
@@ -51,10 +55,10 @@ exposure <- function(drivers,
       exp_j <- vc_mat * dr_mat[, j]
       out_mat <- cbind(out_mat, exp_j)
     }
-    layer_names <- as.vector(outer(vc_names, dr_names, paste, sep = "_"))
     colnames(out_mat) <- layer_names
     out_mat <- with_template(out_mat, drivers[[1]])
-    out_mat
+    attr(out_mat, "layer_map") <- layer_map
+    make_result(out_mat, layer_map, meta = list(exportAs = exportAs))
   } else {
     # Compute overlap for each driver with all vc
     exp_list <- lapply(seq_along(dr_names), function(i) {
@@ -72,7 +76,8 @@ exposure <- function(drivers,
     exp_r <- terra::rast(layers)
     # ensure names are carried through
     names(exp_r) <- unlist(lapply(layers, names), use.names = FALSE)
-    exp_r
+    attr(exp_r, "layer_map") <- layer_map
+    make_result(exp_r, layer_map, meta = list(exportAs = exportAs))
   }
 }
 

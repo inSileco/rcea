@@ -57,6 +57,9 @@ cea <- function(drivers,
   nmDr <- names(drivers)
   nmVC <- names(vc)
   sensitivity <- sensitivity[nmVC, nmDr, drop = FALSE]
+  layer_info <- build_layer_map(drivers, vc)
+  layer_names <- layer_info$layer_names
+  layer_map <- layer_info$layer_map
 
   if (engine == "matrix") {
     # In-memory matrix path: build all vc_driver layers at once
@@ -68,20 +71,21 @@ cea <- function(drivers,
       eff_j <- sweep(exp_j, MARGIN = 2, sensitivity[, j], `*`)
       out_mat <- cbind(out_mat, eff_j)
     }
-    layer_names <- as.vector(outer(nmVC, nmDr, paste, sep = "_"))
     if (exportAs == "matrix") {
       colnames(out_mat) <- layer_names
       out_mat <- with_template(out_mat, drivers[[1]])
-      out_mat
+      attr(out_mat, "layer_map") <- layer_map
+      make_result(out_mat, layer_map, meta = list(engine = engine, exportAs = exportAs))
     } else {
-      matrix_to_raster(out_mat, drivers[[1]], layer_names)
+      out_r <- matrix_to_raster(out_mat, drivers[[1]], layer_names)
+      attr(out_r, "layer_map") <- layer_map
+      make_result(out_r, layer_map, meta = list(engine = engine, exportAs = exportAs))
     }
   } else {
     # Combined stack to avoid building exposure separately
     stk <- c(vc, drivers)
     nvc <- terra::nlyr(vc)
     ndr <- terra::nlyr(drivers)
-    layer_names <- as.vector(outer(nmVC, nmDr, paste, sep = "_"))
 
     fun_ce <- function(x) {
       v <- x[seq_len(nvc)]
@@ -96,9 +100,12 @@ cea <- function(drivers,
     res <- do.call(terra::app, args)
     names(res) <- layer_names
     if (exportAs == "matrix") {
-      raster_to_matrix(res)
+      out_mat <- raster_to_matrix(res)
+      attr(out_mat, "layer_map") <- layer_map
+      make_result(out_mat, layer_map, meta = list(engine = engine, exportAs = exportAs))
     } else {
-      res
+      attr(res, "layer_map") <- layer_map
+      make_result(res, layer_map, meta = list(engine = engine, exportAs = exportAs))
     }
   }
 }
@@ -121,8 +128,8 @@ cea <- function(drivers,
 #'   nrow = 2,
 #'   ncol = 2,
 #'   dimnames = list(
-#'     c("vc_cod", "vc_salmon"),
-#'     c("pressure_shipping", "pressure_climate")
+#'     c("cod", "salmon"),
+#'     c("shipping", "climate")
 #'   )
 #' )
 #' cube <- make_cube(catalog, sensitivity = sens)

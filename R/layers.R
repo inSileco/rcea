@@ -35,30 +35,52 @@
 #'
 #' @export
 layers_extract <- function(dat, layer_ids = NULL, drivers = NULL, vcs = NULL) {
+  res <- extract_result(dat)
+  dat <- res$data
+  layer_map <- res$map
+
   if (is.matrix(dat)) {
     template <- attr(dat, "template")
     nms <- colnames(dat)
     keep <- rep(TRUE, length(nms))
     if (!is.null(layer_ids)) keep <- keep & nms %in% layer_ids
-    if (!is.null(vcs)) keep <- keep & sub("_.*", "", nms) %in% vcs
-    if (!is.null(drivers)) keep <- keep & sub(".*_", "", nms) %in% drivers
+    if (!is.null(layer_map)) {
+      idx <- rep(TRUE, nrow(layer_map))
+      if (!is.null(vcs)) idx <- idx & layer_map$vc %in% vcs
+      if (!is.null(drivers)) idx <- idx & layer_map$driver %in% drivers
+      keep <- keep & nms %in% layer_map$layer[idx]
+    } else {
+      if (!is.null(vcs)) keep <- keep & sub("_.*", "", nms) %in% vcs
+      if (!is.null(drivers)) keep <- keep & sub(".*_", "", nms) %in% drivers
+    }
     dat <- dat[, keep, drop = FALSE]
-    return(with_template(dat, template))
+    dat <- with_template(dat, template)
+    attr(dat, "layer_map") <- if (is.null(layer_map)) NULL else layer_map[layer_map$layer %in% colnames(dat), , drop = FALSE]
+    return(dat)
   }
 
   if (inherits(dat, "SpatRaster")) {
     nms <- names(dat)
     keep <- rep(TRUE, length(nms))
     if (!is.null(layer_ids)) keep <- keep & nms %in% layer_ids
-    if (!is.null(vcs)) keep <- keep & sub("_.*", "", nms) %in% vcs
-    if (!is.null(drivers)) keep <- keep & sub(".*_", "", nms) %in% drivers
-    return(dat[[which(keep)]])
+    if (!is.null(layer_map)) {
+      idx <- rep(TRUE, nrow(layer_map))
+      if (!is.null(vcs)) idx <- idx & layer_map$vc %in% vcs
+      if (!is.null(drivers)) idx <- idx & layer_map$driver %in% drivers
+      keep <- keep & nms %in% layer_map$layer[idx]
+    } else {
+      if (!is.null(vcs)) keep <- keep & sub("_.*", "", nms) %in% vcs
+      if (!is.null(drivers)) keep <- keep & sub(".*_", "", nms) %in% drivers
+    }
+    out <- dat[[which(keep)]]
+    attr(out, "layer_map") <- if (is.null(layer_map)) NULL else layer_map[layer_map$layer %in% names(out), , drop = FALSE]
+    return(out)
   }
 
   # data.frame fallback (legacy)
   if (is.data.frame(dat)) {
     if (!is.null(drivers) && "drivers" %in% colnames(dat)) {
-      dat <- dplyr::filter(dat, drivers %in% .env$drivers)
+      dat <- dat[dat$drivers %in% drivers, , drop = FALSE]
     }
     if (!is.null(layer_ids)) {
       dat <- dplyr::select(dat, dplyr::any_of(c("x", "y", "drivers")), dplyr::all_of(layer_ids))
@@ -127,7 +149,17 @@ layers_aggregate <- function(dat,
   fun <- match.arg(fun)
   exportAs <- match.arg(exportAs)
 
+  res <- extract_result(dat)
+  dat <- res$data
+  layer_map <- res$map
+
   dat <- layers_extract(dat, layer_ids = layer_ids, drivers = drivers, vcs = vcs)
+  if (is_result(dat)) {
+    layer_map <- dat$layer_map
+    dat <- dat$data
+  } else if (is.null(layer_map)) {
+    layer_map <- attr(dat, "layer_map")
+  }
 
   agg_fun <- function(x) {
     switch(fun,
@@ -143,8 +175,13 @@ layers_aggregate <- function(dat,
   if (is.matrix(dat)) {
     template <- attr(dat, "template")
     nms <- colnames(dat)
-    vc_ids <- sub("_.*", "", nms)
-    dr_ids <- sub(".*_", "", nms)
+    if (!is.null(layer_map)) {
+      vc_ids <- layer_map$vc[match(nms, layer_map$layer)]
+      dr_ids <- layer_map$driver[match(nms, layer_map$layer)]
+    } else {
+      vc_ids <- sub("_.*", "", nms)
+      dr_ids <- sub(".*_", "", nms)
+    }
 
     out <- switch(by,
       "none" = dat,
@@ -172,15 +209,43 @@ layers_aggregate <- function(dat,
     out <- with_template(out, template)
     if (exportAs == "SpatRaster") {
       if (is.null(template)) stop("Matrix input lacks template attribute; cannot reconstruct raster.", call. = FALSE)
-      return(matrix_to_raster(out, template, colnames(out)))
+      out_r <- matrix_to_raster(out, template, colnames(out))
+      if (!is.null(layer_map)) {
+        if (by == "drivers") {
+          attr(out_r, "layer_map") <- data.frame(layer = names(out_r), vc = names(out_r), driver = NA, stringsAsFactors = FALSE)
+        } else if (by == "vcs") {
+          attr(out_r, "layer_map") <- data.frame(layer = names(out_r), vc = NA, driver = names(out_r), stringsAsFactors = FALSE)
+        } else if (by == "both") {
+          attr(out_r, "layer_map") <- data.frame(layer = "cumulative", vc = NA, driver = NA, stringsAsFactors = FALSE)
+        } else {
+          attr(out_r, "layer_map") <- layer_map[layer_map$layer %in% names(out_r), , drop = FALSE]
+        }
+      }
+      return(out_r)
+    }
+    if (!is.null(layer_map)) {
+      if (by == "drivers") {
+        attr(out, "layer_map") <- data.frame(layer = colnames(out), vc = colnames(out), driver = NA, stringsAsFactors = FALSE)
+      } else if (by == "vcs") {
+        attr(out, "layer_map") <- data.frame(layer = colnames(out), vc = NA, driver = colnames(out), stringsAsFactors = FALSE)
+      } else if (by == "both") {
+        attr(out, "layer_map") <- data.frame(layer = "cumulative", vc = NA, driver = NA, stringsAsFactors = FALSE)
+      } else {
+        attr(out, "layer_map") <- layer_map[layer_map$layer %in% colnames(out), , drop = FALSE]
+      }
     }
     return(out)
   }
 
   if (inherits(dat, "SpatRaster")) {
     nms <- names(dat)
-    vc_ids <- sub("_.*", "", nms)
-    dr_ids <- sub(".*_", "", nms)
+    if (!is.null(layer_map)) {
+      vc_ids <- layer_map$vc[match(nms, layer_map$layer)]
+      dr_ids <- layer_map$driver[match(nms, layer_map$layer)]
+    } else {
+      vc_ids <- sub("_.*", "", nms)
+      dr_ids <- sub(".*_", "", nms)
+    }
 
     out <- switch(by,
       "none" = dat,
@@ -206,7 +271,30 @@ layers_aggregate <- function(dat,
     )
 
     if (exportAs == "matrix") {
-      return(raster_to_matrix(out))
+      out_mat <- raster_to_matrix(out)
+      if (!is.null(layer_map)) {
+        if (by == "drivers") {
+          attr(out_mat, "layer_map") <- data.frame(layer = colnames(out_mat), vc = colnames(out_mat), driver = NA, stringsAsFactors = FALSE)
+        } else if (by == "vcs") {
+          attr(out_mat, "layer_map") <- data.frame(layer = colnames(out_mat), vc = NA, driver = colnames(out_mat), stringsAsFactors = FALSE)
+        } else if (by == "both") {
+          attr(out_mat, "layer_map") <- data.frame(layer = "cumulative", vc = NA, driver = NA, stringsAsFactors = FALSE)
+        } else {
+          attr(out_mat, "layer_map") <- layer_map[layer_map$layer %in% colnames(out_mat), , drop = FALSE]
+        }
+      }
+      return(out_mat)
+    }
+    if (!is.null(layer_map)) {
+      if (by == "drivers") {
+        attr(out, "layer_map") <- data.frame(layer = names(out), vc = names(out), driver = NA, stringsAsFactors = FALSE)
+      } else if (by == "vcs") {
+        attr(out, "layer_map") <- data.frame(layer = names(out), vc = NA, driver = names(out), stringsAsFactors = FALSE)
+      } else if (by == "both") {
+        attr(out, "layer_map") <- data.frame(layer = "cumulative", vc = NA, driver = NA, stringsAsFactors = FALSE)
+      } else {
+        attr(out, "layer_map") <- layer_map[layer_map$layer %in% names(out), , drop = FALSE]
+      }
     }
     return(out)
   }
@@ -289,7 +377,17 @@ layers_per_area <- function(dat,
                             vcs = NULL,
                             layer_ids = NULL,
                             area_unit = "km") {
+  res <- extract_result(dat)
+  dat <- res$data
+  layer_map <- res$map
+
   dat <- layers_extract(dat, layer_ids = layer_ids, drivers = drivers, vcs = vcs)
+  if (is_result(dat)) {
+    layer_map <- dat$layer_map
+    dat <- dat$data
+  } else if (is.null(layer_map)) {
+    layer_map <- attr(dat, "layer_map")
+  }
 
   # Subset vc if requested
   if (!is.null(vcs)) {
@@ -329,8 +427,13 @@ layers_per_area <- function(dat,
     stop("dat must be a SpatRaster or matrix with template attribute.", call. = FALSE)
   }
 
-  vc_ids <- sub("_.*", "", layer_names)
-  dr_ids <- sub(".*_", "", layer_names)
+  if (!is.null(layer_map)) {
+    vc_ids <- layer_map$vc[match(layer_names, layer_map$layer)]
+    dr_ids <- layer_map$driver[match(layer_names, layer_map$layer)]
+  } else {
+    vc_ids <- sub("_.*", "", layer_names)
+    dr_ids <- sub(".*_", "", layer_names)
+  }
   df <- data.frame(vc = vc_ids, drivers = dr_ids, total = layer_sums)
 
   df <- tidyr::pivot_wider(df, names_from = drivers, values_from = total)

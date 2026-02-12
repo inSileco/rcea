@@ -31,7 +31,7 @@ test_that("layers_per_area computes per-area effects", {
 
   res <- layers_per_area(ce_mat, dat$vc)
 
-  layer_sums <- colSums(ce_mat, na.rm = TRUE)
+  layer_sums <- colSums(ce_mat$data, na.rm = TRUE)
   area_r <- terra::cellSize(dat$vc[[1]], unit = "km")
   area_vec <- terra::values(area_r, mat = FALSE)
   vc_area <- colSums(terra::values(dat$vc, mat = TRUE) * area_vec, na.rm = TRUE)
