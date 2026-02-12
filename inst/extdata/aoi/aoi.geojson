@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "aoi",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::3857" } },
+"features": [
+{ "type": "Feature", "properties": { }, "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ 2000.0, 2000.0 ], [ 18000.0, 2000.0 ], [ 18000.0, 18000.0 ], [ 2000.0, 18000.0 ], [ 2000.0, 2000.0 ] ] ] ] } }
+]
+}

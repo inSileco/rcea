@@ -2,3 +2,40 @@ url: https://ecosystem-assessments.github.io/rcea/
 template:
   bootstrap: 5
 
+reference:
+  - title: Data Prep & Catalog
+    contents:
+      - load_catalog
+      - normalize_aoi
+      - make_cube
+      - stack_layers
+      - collect_layers
+  - title: CEA Analysis
+    contents:
+      - cea
+      - cea_cube
+      - exposure
+      - exposure_cube
+      - export_result
+  - title: NCEA Analysis
+    contents:
+      - ncea
+      - ncea_species
+      - ncea_split
+      - ncea_effects
+      - ncea_motifs
+      - ncea_pathways
+      - ncea_pathways_
+      - triads
+      - get_cekm_ncea
+      - get_direct_indirect
+      - get_net
+      - get_species_contribution
+  - title: Post-processing
+    contents:
+      - layers_extract
+      - layers_aggregate
+      - layers_per_area
+  - title: Data
+    contents:
+      - trophic_sensitivity

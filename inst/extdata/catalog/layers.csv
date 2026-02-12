@@ -1,0 +1,6 @@
+layer_id,path,type,group,units,crs,res_x,res_y
+shipping,../rasters/pressure_shipping.tif,pressure,shipping,index,EPSG:3857,1000,1000
+climate,../rasters/pressure_climate.tif,pressure,climate,index,EPSG:3857,1000,1000
+cod,../rasters/vc_cod.tif,vc,fish,presence,EPSG:3857,1000,1000
+salmon,../rasters/vc_salmon.tif,vc,fish,presence,EPSG:3857,1000,1000
+mask_study_area,../rasters/mask_study_area.tif,aux,mask,mask,EPSG:3857,1000,1000

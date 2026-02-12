@@ -2,12 +2,19 @@
 % Please edit documentation in R/cea.R
 \name{cea}
 \alias{cea}
-\alias{get_cekm_cea}
 \title{Cumulative effects assessments}
 \usage{
-cea(drivers, vc, sensitivity, exportAs = "list")
-
-get_cekm_cea(dat, vc)
+cea(
+  drivers,
+  vc,
+  sensitivity,
+  exportAs = "SpatRaster",
+  align = "error",
+  template = NULL,
+  cores = NULL,
+  filename = NULL,
+  engine = "matrix"
+)
 }
 \arguments{
 \item{drivers}{distribution and intensity of environmental drivers as stars object}
@@ -16,30 +23,45 @@ get_cekm_cea(dat, vc)
 
 \item{sensitivity}{matrix of environmental drivers and valued component, with same name as those used in \code{drivers} and \code{vc}}
 
-\item{exportAs}{string, the type of object that should be created, either a "list" or a "stars" object.}
+\item{exportAs}{string, "SpatRaster" or "matrix".}
 
-\item{dat}{TODO}
+\item{align}{alignment policy, one of "error", "reproject", "template".}
+
+\item{template}{optional SpatRaster to align to when \code{align = "template"}.}
+
+\item{cores}{number of threads for terra::app.}
+
+\item{filename}{optional path to write the output raster stack (useful for large jobs).}
+
+\item{engine}{calculation engine, one of "matrix" (fast, in-memory) or "terra" (streaming/chunked).}
 }
 \description{
 Assessment of cumulative effects using the Halpern et al. 2008 method.
 }
-\section{Functions}{
-\itemize{
-\item \code{get_cekm_cea()}: get effects per km2
-
-}}
 \examples{
-# Data
-drivers <- rcea:::drivers
-vc <- rcea:::vc
-sensitivity <- rcea:::sensitivity
+drv_paths <- system.file(
+  "extdata/rasters",
+  c("pressure_shipping.tif", "pressure_climate.tif"),
+  package = "rcea"
+)
+vc_paths <- system.file(
+  "extdata/rasters",
+  c("vc_cod.tif", "vc_salmon.tif"),
+  package = "rcea"
+)
+drivers <- terra::rast(drv_paths)
+names(drivers) <- c("shipping", "climate")
+vc <- terra::rast(vc_paths)
+names(vc) <- c("cod", "salmon")
+sens <- matrix(
+  c(
+    0.8, 0.5,
+    0.2, 0.7
+  ),
+  nrow = 2,
+  dimnames = list(c("cod", "salmon"), c("shipping", "climate"))
+)
+ce <- cea(drivers, vc, sens, exportAs = "SpatRaster")
+ce
 
-# Species-scale effects
-(halpern <- cea(drivers, vc, sensitivity, "stars"))
-plot(halpern)
-halpern <- merge(halpern, name = "vc") |>
-  split("drivers")
-plot(halpern)
-# do not work
-# get_cekm_cea(halpern, vc)
 }

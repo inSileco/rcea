@@ -3,94 +3,162 @@
 #' Assessment of cumulative effects using the Halpern et al. 2008 method.
 #'
 #' @eval arguments(c("drivers", "vc", "sensitivity"))
-#' @param exportAs string, the type of object that should be created, either a "list" or a "stars" object.
-#'
-#' @export
+#' @param exportAs string, "SpatRaster" or "matrix".
+#' @param align alignment policy, one of "error", "reproject", "template".
+#' @param template optional SpatRaster to align to when `align = "template"`.
+#' @param cores number of threads for terra::app.
+#' @param filename optional path to write the output raster stack (useful for large jobs).
+#' @param engine calculation engine, one of "matrix" (fast, in-memory) or "terra" (streaming/chunked).
 #'
 #' @examples
-#' # Data
-#' drivers <- rcea:::drivers
-#' vc <- rcea:::vc
-#' sensitivity <- rcea:::sensitivity
+#' drv_paths <- system.file(
+#'   "extdata/rasters",
+#'   c("pressure_shipping.tif", "pressure_climate.tif"),
+#'   package = "rcea"
+#' )
+#' vc_paths <- system.file(
+#'   "extdata/rasters",
+#'   c("vc_cod.tif", "vc_salmon.tif"),
+#'   package = "rcea"
+#' )
+#' drivers <- terra::rast(drv_paths)
+#' names(drivers) <- c("shipping", "climate")
+#' vc <- terra::rast(vc_paths)
+#' names(vc) <- c("cod", "salmon")
+#' sens <- matrix(
+#'   c(
+#'     0.8, 0.5,
+#'     0.2, 0.7
+#'   ),
+#'   nrow = 2,
+#'   dimnames = list(c("cod", "salmon"), c("shipping", "climate"))
+#' )
+#' ce <- cea(drivers, vc, sens, exportAs = "SpatRaster")
+#' ce
 #'
-#' # Species-scale effects
-#' (halpern <- cea(drivers, vc, sensitivity, "stars"))
-#' plot(halpern)
-#' halpern <- merge(halpern, name = "vc") |>
-#'   split("drivers")
-#' plot(halpern)
-#' # do not work
-#' # get_cekm_cea(halpern, vc)
-cea <- function(drivers, vc, sensitivity, exportAs = "list") {
-  # needed as 
-  # requireNamespace("stars", quietly = TRUE) 
-  # Exposure
-  dat <- exposure(drivers, vc)
+#' @export
+cea <- function(drivers,
+                vc,
+                sensitivity,
+                exportAs = "SpatRaster",
+                align = "error",
+                template = NULL,
+                cores = NULL,
+                filename = NULL,
+                engine = "matrix") {
+  engine <- match.arg(engine, c("matrix", "terra"))
+  exportAs <- match.arg(exportAs, c("SpatRaster", "matrix"))
 
-  # Sensitivity
-  nmDr <- names(dat)
-  nmVC <- names(dat[[1]])
-  sensitivity <- sensitivity[nmVC, nmDr]
+  # Align rasters if needed
+  out_align <- align_pair(drivers, vc, align = align, template = template)
+  drivers <- out_align$drivers
+  vc <- out_align$vc
 
-  # Effect of drivers on valued components (D * VC * u)
-  for (i in seq_len(length(dat))) {
-    dat[[i]] <- sweep(dat[[i]], MARGIN = 2, sensitivity[, i], `*`)
-  }
+  nmDr <- names(drivers)
+  nmVC <- names(vc)
+  sensitivity <- sensitivity[nmVC, nmDr, drop = FALSE]
+  layer_info <- build_layer_map(drivers, vc)
+  layer_names <- layer_info$layer_names
+  layer_map <- layer_info$layer_map
 
-  # Return
-  if (exportAs == "list") {
-    dat
-  } else if (exportAs == "stars") {
-    xy <- sf::st_coordinates(vc)
-    drNames <- names(drivers)
-    make_stars(dat, drivers, vc)
+  if (engine == "matrix") {
+    # In-memory matrix path: build all vc_driver layers at once
+    dr_mat <- terra::values(drivers, mat = TRUE)
+    vc_mat <- terra::values(vc, mat = TRUE)
+    out_mat <- NULL
+    for (j in seq_along(nmDr)) {
+      exp_j <- vc_mat * dr_mat[, j]
+      eff_j <- sweep(exp_j, MARGIN = 2, sensitivity[, j], `*`)
+      out_mat <- cbind(out_mat, eff_j)
+    }
+    if (exportAs == "matrix") {
+      colnames(out_mat) <- layer_names
+      out_mat <- with_template(out_mat, drivers[[1]])
+      attr(out_mat, "layer_map") <- layer_map
+      make_result(out_mat, layer_map, meta = list(engine = engine, exportAs = exportAs))
+    } else {
+      out_r <- matrix_to_raster(out_mat, drivers[[1]], layer_names)
+      attr(out_r, "layer_map") <- layer_map
+      make_result(out_r, layer_map, meta = list(engine = engine, exportAs = exportAs))
+    }
+  } else {
+    # Combined stack to avoid building exposure separately
+    stk <- c(vc, drivers)
+    nvc <- terra::nlyr(vc)
+    ndr <- terra::nlyr(drivers)
+
+    fun_ce <- function(x) {
+      v <- x[seq_len(nvc)]
+      d <- x[(nvc + 1):(nvc + ndr)]
+      eff <- (v %o% d) * sensitivity
+      as.vector(eff)
+    }
+
+    args <- list(x = stk, fun = fun_ce)
+    if (!is.null(cores)) args$cores <- cores
+    if (!is.null(filename)) args$filename <- filename
+    res <- do.call(terra::app, args)
+    names(res) <- layer_names
+    if (exportAs == "matrix") {
+      out_mat <- raster_to_matrix(res)
+      attr(out_mat, "layer_map") <- layer_map
+      make_result(out_mat, layer_map, meta = list(engine = engine, exportAs = exportAs))
+    } else {
+      attr(res, "layer_map") <- layer_map
+      make_result(res, layer_map, meta = list(engine = engine, exportAs = exportAs))
+    }
   }
 }
 
-#' @describeIn cea get effects per km2
-#' @param dat TODO
+#' Run CEA from a cube
+#'
+#' Convenience wrapper around `cea()` that uses stacks and sensitivity stored in
+#' an `rcea_cube`.
+#'
+#' @param cube rcea_cube with `stack$drivers`, `stack$vc`, and optionally `sensitivity`.
+#' @param sensitivity Optional vulnerability matrix; overrides `cube$sensitivity` when provided.
+#' @param ... Additional arguments passed to `cea()`.
+#'
+#' @examples
+#' layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
+#' groups_path <- system.file("extdata/catalog/groups.yaml", package = "rcea")
+#' catalog <- load_catalog(layers_path, groups_path)
+#' sens <- matrix(
+#'   1,
+#'   nrow = 2,
+#'   ncol = 2,
+#'   dimnames = list(
+#'     c("cod", "salmon"),
+#'     c("shipping", "climate")
+#'   )
+#' )
+#' cube <- make_cube(catalog, sensitivity = sens)
+#' cube <- stack_layers(cube)
+#' ce <- cea_cube(cube, engine = "matrix")
+#' ce
+#'
 #' @export
-get_cekm_cea <- function(dat, vc) {
-  dat2 <- dat
-  # CEA as data.frame
-  dat <- as.data.frame(dat)
+cea_cube <- function(cube, sensitivity = NULL, ...) {
+  if (!inherits(cube, "rcea_cube")) stop("cube must be an rcea_cube.", call. = FALSE)
+  if (is.null(cube$stack)) stop("cube$stack is empty; call stack_layers() first.", call. = FALSE)
 
-  # vc as data.frame
-  vc_df <- as.data.frame(vc) |>
-    dplyr::select(-x, -y)
+  if (!is.null(cube$stack) && is.list(cube$stack)) {
+    drivers <- cube$stack$drivers
+    vc <- cube$stack$vc
+  } else if (inherits(cube$stack, "SpatRaster")) {
+    stop("cube$stack must include drivers and vc stacks; rebuild with stack_layers().", call. = FALSE)
+  } else {
+    stop("cube$stack must be a list with drivers and vc stacks.", call. = FALSE)
+  }
 
-  # Index of vc
-  vc_index <- data.frame(
-    vc = colnames(vc_df),
-    vc_id = seq_len(ncol(vc_df))
-  )
+  if (is.null(drivers) || is.null(vc)) {
+    stop("cube$stack must include both drivers and vc stacks.", call. = FALSE)
+  }
 
-  # Calculate area, i.e. number of cells (assuming 1km2 grid cells)
-  vc_df <- vc_df |>
-    dplyr::mutate(id_cell = 1:dplyr::n()) |>
-    tidyr::pivot_longer(cols = -c(id_cell), names_to = "vc", values_to = "presence") |>
-    dplyr::group_by(vc) |>
-    dplyr::summarise(km2 = sum(presence, na.rm = TRUE)) |>
-    dplyr::left_join(vc_index, by = "vc") |>
-    dplyr::ungroup()
+  if (is.null(sensitivity)) sensitivity <- cube$sensitivity
+  if (is.null(sensitivity)) {
+    stop("sensitivity not provided and cube$sensitivity is NULL.", call. = FALSE)
+  }
 
-  # Total effects per vc
-  dat <- dplyr::select(dat, -x, -y) |>
-    dplyr::group_by(drivers) |>
-    dplyr::summarise(
-      dplyr::across(
-        dplyr::everything(),
-        \(x) sum(x, na.rm = TRUE)
-      )
-    ) |>
-    dplyr::ungroup() |>
-    tidyr::pivot_longer(cols = -c(drivers), names_to = "vc", values_to = "cea") |>
-    dplyr::left_join(vc_df, by = "vc") |>
-    dplyr::mutate(cea = cea / km2) |>
-    dplyr::select(-vc, -km2) |>
-    tidyr::pivot_wider(names_from = drivers, values_from = cea) |>
-    dplyr::arrange(vc_id)
-
-  # Return
-  dat
+  cea(drivers, vc, sensitivity, ...)
 }

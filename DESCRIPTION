@@ -1,7 +1,7 @@
 Package: rcea
 Type: Package
 Title: Spatially-explicit cumulative effects assessments in R
-Version: 1.0.0
+Version: 1.2.0
 Authors@R: c(
   person(
     given   = "David",
@@ -16,7 +16,7 @@ Authors@R: c(
     email   = "kcazelle@uoguelph.ca", 
     comment = c(ORCID = "0000-0001-6619-9874"))
  )
-Description: Package providing functionalities to perform spatially explicit cumulative effects assessments
+Description: Package providing functionalities to perform spatially explicit cumulative effects assessments.
 URL: https://ecosystem-assessments.github.io/rcea/
 BugReports: https://ecosystem-assessments.github.io/rcea/issues
 License: GPL (>= 2)
@@ -26,6 +26,7 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports:
     cli,
+    digest,
     data.table,
     dplyr,
     fs,
@@ -33,9 +34,9 @@ Imports:
     grDevices,
     graphics,
     here,
+    methods,
     motifcensus,
     purrr,
-    raster,
     rlang,
     sf,
     stats,
@@ -43,6 +44,7 @@ Imports:
     stringr,
     terra,
     tidyr,
+    units,
     vroom,
     whisker,
     yaml

@@ -70,8 +70,8 @@ plot(merge(drivers), col = pal)
 plot(merge(vc), col = pal(1))
 
 # Cumulative footprint
-foot_dr <- cea_extract(drivers, cumul_fun = "footprint")
-foot_vc <- cea_extract(vc, cumul_fun = "footprint")
+foot_dr <- layers_aggregate(drivers, by = "both")
+foot_vc <- layers_aggregate(vc, by = "both")
 plot(foot_dr, col = pal)
 plot(foot_vc, breaks = "equal", col = pal)
 
@@ -81,37 +81,37 @@ expo <- exposure(drivers, vc, "stars")
 # Extract specific attributes and evaluate cumulative exposure
 dr_sel <- c("driver1","driver5")
 vc_sel <- c("vc4","vc7","vc10","vc12")
-dat <- cea_extract(expo, dr_sel = dr_sel, vc_sel = vc_sel) 
+dat <- layers_extract(expo, drivers = dr_sel, vcs = vc_sel) 
 plot(dat["vc4"], col = pal) # Exposure of vc4 to driver1 and driver5
 
 # Cumulative effects assessment (Halpern et al. 2008)
 halpern <- cea(drivers, vc, sensitivity, "stars")
 
-# Cumulative effects of all drivers on all vc
-dat <- cea_extract(halpern, cumul_fun = "drivers")
+# Cumulative effects of each driver across all vc
+dat <- layers_aggregate(halpern, by = "vcs")
 plot(merge(dat), breaks = "equal", col = pal)
 
 # Cumulative effects of all drivers on each vc
-dat <- cea_extract(halpern, cumul_fun = "vc") 
+dat <- layers_aggregate(halpern, by = "drivers") 
 plot(merge(dat), breaks = "equal", col = pal)
 
 # Full cumulative effects
-dat <- cea_extract(dat, cumul_fun = "full") 
+dat <- layers_aggregate(dat, by = "both") 
 plot(dat, breaks = "equal", col = pal)
 
 # Network-scale cumulative effects assessment (Beauchesne et al. 2021)
 beauchesne <- ncea(drivers, vc, sensitivity, metaweb, trophic_sensitivity)
 
 # Net cumulative effects
-dat <- cea_extract(beauchesne$net, cumul_fun = "full") 
+dat <- layers_aggregate(beauchesne$net, by = "both") 
 plot(dat, breaks = "equal", col = pal)
 
 # Direct cumulative effects
-dat <- cea_extract(beauchesne$direct, cumul_fun = "full") 
+dat <- layers_aggregate(beauchesne$direct, by = "both") 
 plot(dat, breaks = "equal", col = pal)
 
 # Indirect cumulative effects
-dat <- cea_extract(beauchesne$indirect, cumul_fun = "full") 
+dat <- layers_aggregate(beauchesne$indirect, by = "both") 
 plot(dat, breaks = "equal", col = pal)
 ```
 

@@ -1,0 +1,13 @@
+pressure:
+  shipping:
+    members: shipping
+  climate:
+    members: climate
+vc:
+  fish:
+    members:
+    - cod
+    - salmon
+aux:
+  mask:
+    members: mask_study_area

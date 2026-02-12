@@ -22,3 +22,7 @@ $run_dev.*
 ^\.rscignore$
 ^doc$
 ^Meta$
+^scripts/
+^catalog/
+^config\\.yml$
+^LICENSE.md
