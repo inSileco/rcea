@@ -31,6 +31,13 @@ test_that("make_cube stores catalog, aoi, and sensitivity", {
   expect_equal(cube$sensitivity, sens)
 })
 
+test_that("make_cube uses catalog sensitivity when not explicitly provided", {
+  catalog <- catalog_fixture()
+  cube <- make_cube(catalog)
+  expect_true(is.matrix(cube$sensitivity))
+  expect_equal(cube$sensitivity, catalog$sensitivity)
+})
+
 test_that("stack_layers builds drivers and vc stacks", {
   catalog <- catalog_fixture()
   cube <- make_cube(catalog)

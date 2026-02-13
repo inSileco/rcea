@@ -2,7 +2,9 @@
 #'
 #' @param layers Path to layers.csv
 #' @param groups Path to groups.yaml
-#' @return A list with `layers` tibble and `groups` list.
+#' @param sensitivity Optional path to sensitivity.csv. If `NULL`, a file named
+#'   `sensitivity.csv` in the same directory as `layers` is used when present.
+#' @return A list with `layers` tibble, `groups` list, and optional `sensitivity` matrix.
 #' @examples
 #' layers_path <- system.file("extdata/catalog/layers.csv", package = "rcea")
 #' groups_path <- system.file("extdata/catalog/groups.yaml", package = "rcea")
@@ -12,7 +14,8 @@
 #'
 #' @export
 load_catalog <- function(layers = file.path("catalog", "layers.csv"),
-                         groups = file.path("catalog", "groups.yaml")) {
+                         groups = file.path("catalog", "groups.yaml"),
+                         sensitivity = NULL) {
   if (!file.exists(layers)) stop("layers.csv not found at ", layers, call. = FALSE)
   if (!file.exists(groups)) stop("groups.yaml not found at ", groups, call. = FALSE)
 
@@ -28,7 +31,53 @@ load_catalog <- function(layers = file.path("catalog", "layers.csv"),
   }
   grp <- yaml::read_yaml(groups)
 
-  validate_catalog(lay, grp)
+  sens <- resolve_sensitivity(sensitivity, layers)
+  out <- validate_catalog(lay, grp)
+  out$sensitivity <- sens
+  out
+}
+
+resolve_sensitivity <- function(sensitivity, layers_path) {
+  base_dir <- dirname(layers_path)
+  sens_path <- sensitivity
+  if (is.null(sens_path)) {
+    candidate <- file.path(base_dir, "sensitivity.csv")
+    if (!file.exists(candidate)) return(NULL)
+    sens_path <- candidate
+  } else {
+    is_abs <- grepl("^(/|[A-Za-z]:[\\\\/]|\\\\\\\\)", sens_path)
+    if (!is_abs) sens_path <- file.path(base_dir, sens_path)
+    if (!file.exists(sens_path)) {
+      stop("sensitivity.csv not found at ", sens_path, call. = FALSE)
+    }
+  }
+
+  read_sensitivity_csv(sens_path)
+}
+
+read_sensitivity_csv <- function(path) {
+  dat <- utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+  if (ncol(dat) < 2) stop("sensitivity.csv must have one id column and at least one driver column.", call. = FALSE)
+
+  id_col <- if ("vc_id" %in% names(dat)) "vc_id" else names(dat)[1]
+  ids <- as.character(dat[[id_col]])
+  if (any(!nzchar(ids) | is.na(ids))) stop("sensitivity.csv contains empty VC ids.", call. = FALSE)
+  if (any(duplicated(ids))) stop("Duplicate VC ids in sensitivity.csv.", call. = FALSE)
+
+  val_cols <- setdiff(names(dat), id_col)
+  if (!length(val_cols)) stop("sensitivity.csv has no driver columns.", call. = FALSE)
+  if (any(duplicated(val_cols))) stop("Duplicate driver ids in sensitivity.csv header.", call. = FALSE)
+
+  vals <- dat[, val_cols, drop = FALSE]
+  vals[] <- lapply(vals, as.numeric)
+  if (any(is.na(as.matrix(vals)))) {
+    stop("sensitivity.csv must contain numeric values only.", call. = FALSE)
+  }
+
+  m <- as.matrix(vals)
+  rownames(m) <- ids
+  colnames(m) <- val_cols
+  m
 }
 
 validate_catalog <- function(layers, groups) {

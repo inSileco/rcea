@@ -10,6 +10,7 @@ test_that("load_catalog validates structure and paths", {
 
   layers_path <- file.path(tmp, "layers.csv")
   groups_path <- file.path(tmp, "groups.yaml")
+  sens_path <- file.path(tmp, "sensitivity.csv")
 
   layers <- data.frame(
     layer_id = "shipping",
@@ -22,15 +23,18 @@ test_that("load_catalog validates structure and paths", {
 
   groups <- list(pressure = list(shipping = list(members = "shipping")))
   yaml::write_yaml(groups, groups_path)
+  writeLines(c("vc_id,shipping", "cod,0.8"), sens_path)
 
   out <- load_catalog(layers_path, groups_path)
   expect_true(is.list(out))
-  expect_true(all(c("layers", "groups") %in% names(out)))
+  expect_true(all(c("layers", "groups", "sensitivity") %in% names(out)))
   expect_equal(out$layers$layer_id, "shipping")
   expect_equal(out$layers$crs, "EPSG:3857")
   expect_equal(out$layers$res_x, 1)
   expect_equal(out$layers$res_y, 1)
   expect_equal(out$layers$units, "idx")
+  expect_true(is.matrix(out$sensitivity))
+  expect_equal(out$sensitivity["cod", "shipping"], 0.8)
 })
 
 test_that("validate_catalog flags bad inputs", {
@@ -84,6 +88,30 @@ test_that("normalize_aoi supports bbox, WKT, and SpatVector", {
 
   v3 <- normalize_aoi(v1)
   expect_true(inherits(v3, "SpatVector"))
+})
+
+test_that("load_catalog errors on missing explicit sensitivity path", {
+  tmp <- tempfile("catalog_")
+  dir.create(tmp)
+
+  tif <- file.path(tmp, "dummy.tif")
+  r <- terra::rast(ncols = 1, nrows = 1, xmin = 0, xmax = 1, ymin = 0, ymax = 1, crs = "EPSG:3857")
+  r[] <- 1
+  terra::writeRaster(r, tif, overwrite = TRUE)
+
+  layers_path <- file.path(tmp, "layers.csv")
+  groups_path <- file.path(tmp, "groups.yaml")
+  write.csv(
+    data.frame(layer_id = "shipping", path = tif, type = "pressure", group = "shipping", stringsAsFactors = FALSE),
+    layers_path,
+    row.names = FALSE
+  )
+  yaml::write_yaml(list(pressure = list(shipping = list(members = "shipping"))), groups_path)
+
+  expect_error(
+    load_catalog(layers_path, groups_path, sensitivity = "missing.csv"),
+    "sensitivity.csv not found"
+  )
 })
 
 test_that("normalize_aoi errors on unsupported input", {

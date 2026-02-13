@@ -24,6 +24,9 @@ make_cube <- function(catalog, aoi = NULL, sensitivity = NULL) {
   if (!is.null(aoi)) {
     aoi <- normalize_aoi(aoi)
   }
+  if (is.null(sensitivity) && !is.null(catalog$sensitivity)) {
+    sensitivity <- catalog$sensitivity
+  }
   structure(
     list(
       catalog = catalog,

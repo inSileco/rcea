@@ -6,16 +6,20 @@
 \usage{
 load_catalog(
   layers = file.path("catalog", "layers.csv"),
-  groups = file.path("catalog", "groups.yaml")
+  groups = file.path("catalog", "groups.yaml"),
+  sensitivity = NULL
 )
 }
 \arguments{
 \item{layers}{Path to layers.csv}
 
 \item{groups}{Path to groups.yaml}
+
+\item{sensitivity}{Optional path to sensitivity.csv. If \code{NULL}, a file named
+\code{sensitivity.csv} in the same directory as \code{layers} is used when present.}
 }
 \value{
-A list with \code{layers} tibble and \code{groups} list.
+A list with \code{layers} tibble, \code{groups} list, and optional \code{sensitivity} matrix.
 }
 \description{
 Load and validate catalog
