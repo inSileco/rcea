@@ -10,6 +10,7 @@ reference:
       - make_cube
       - stack_layers
       - collect_layers
+      - preprocess_layers
   - title: CEA Analysis
     contents:
       - cea
@@ -35,6 +36,7 @@ reference:
     contents:
       - layers_extract
       - layers_aggregate
+      - layers_aggregate_groups
       - layers_per_area
   - title: Data
     contents:

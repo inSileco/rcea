@@ -194,3 +194,88 @@ test_that("cea_cube carries catalog time metadata into layer_map grouping", {
   expect_equal(ncol(grouped), 2)
   expect_setequal(colnames(grouped), c("2020-01", "2020-02"))
 })
+
+test_that("preprocess_layers applies global transforms and normalization", {
+  td <- tempdir()
+  dr <- terra::rast(ncols = 2, nrows = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2, crs = "EPSG:3857")
+  vc <- dr
+  terra::values(dr) <- c(0, 1, 3, 7)
+  terra::values(vc) <- c(1, 1, 1, 1)
+
+  p_dr <- file.path(td, "pre_dr.tif")
+  p_vc <- file.path(td, "pre_vc.tif")
+  terra::writeRaster(dr, p_dr, overwrite = TRUE)
+  terra::writeRaster(vc, p_vc, overwrite = TRUE)
+
+  catalog <- list(
+    layers = data.frame(
+      layer_id = c("shipping", "cod"),
+      path = c(p_dr, p_vc),
+      type = c("pressure", "vc"),
+      group = c("shipping", "fish"),
+      stringsAsFactors = FALSE
+    ),
+    groups = list()
+  )
+
+  cube <- make_cube(catalog)
+  cube <- stack_layers(cube)
+  cube <- preprocess_layers(cube, drivers_transform = "log1p", drivers_normalize = "minmax")
+
+  out_dr <- as.numeric(terra::values(cube$stack$drivers[[1]], mat = TRUE)[, 1])
+  expected <- log1p(c(0, 1, 3, 7))
+  expected <- (expected - min(expected)) / (max(expected) - min(expected))
+  expect_equal(out_dr, expected)
+
+  out_vc <- as.numeric(terra::values(cube$stack$vc[[1]], mat = TRUE)[, 1])
+  expect_equal(out_vc, rep(1, 4))
+})
+
+test_that("preprocess_layers allows catalog overrides", {
+  td <- tempdir()
+  dr <- terra::rast(ncols = 1, nrows = 2, xmin = 0, xmax = 1, ymin = 0, ymax = 2, crs = "EPSG:3857")
+  vc <- dr
+  terra::values(dr) <- c(9, 16)
+  terra::values(vc) <- c(4, 9)
+
+  p_dr <- file.path(td, "pre2_dr.tif")
+  p_vc <- file.path(td, "pre2_vc.tif")
+  terra::writeRaster(dr, p_dr, overwrite = TRUE)
+  terra::writeRaster(vc, p_vc, overwrite = TRUE)
+
+  catalog <- list(
+    layers = data.frame(
+      layer_id = c("shipping", "cod"),
+      path = c(p_dr, p_vc),
+      type = c("pressure", "vc"),
+      group = c("shipping", "fish"),
+      transform = c("none", "sqrt"),
+      normalize = c("max", "none"),
+      stringsAsFactors = FALSE
+    ),
+    groups = list()
+  )
+
+  cube <- make_cube(catalog)
+  cube <- stack_layers(cube)
+  cube <- preprocess_layers(
+    cube,
+    drivers_transform = "log1p",
+    drivers_normalize = "none",
+    vc_transform = "none",
+    vc_normalize = "none",
+    use_catalog_overrides = TRUE
+  )
+
+  out_dr <- as.numeric(terra::values(cube$stack$drivers[[1]], mat = TRUE)[, 1])
+  expect_equal(out_dr, c(9, 16) / 16)
+
+  out_vc <- as.numeric(terra::values(cube$stack$vc[[1]], mat = TRUE)[, 1])
+  expect_equal(out_vc, sqrt(c(4, 9)))
+
+  dr_meta <- attr(cube$stack$drivers, "layer_meta")
+  vc_meta <- attr(cube$stack$vc, "layer_meta")
+  expect_equal(dr_meta$applied_transform[dr_meta$layer == "shipping"], "none")
+  expect_equal(dr_meta$applied_normalize[dr_meta$layer == "shipping"], "max")
+  expect_equal(vc_meta$applied_transform[vc_meta$layer == "cod"], "sqrt")
+})

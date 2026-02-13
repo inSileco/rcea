@@ -110,3 +110,60 @@ test_that("layers_aggregate supports metadata-based grouping", {
   dimnames(expected) <- NULL
   expect_equal(res, expected)
 })
+
+test_that("layers_aggregate_groups balances within-group member counts", {
+  tmpl <- terra::rast(ncols = 1, nrows = 2, xmin = 0, xmax = 1, ymin = 0, ymax = 2, crs = "EPSG:3857")
+  dat <- cbind(
+    cod_ship_a = c(1, 2),
+    cod_ship_b = c(3, 4),
+    cod_fish_a = c(10, 20)
+  )
+  dat <- with_template(dat, tmpl)
+  attr(dat, "layer_map") <- data.frame(
+    layer = colnames(dat),
+    vc = "cod",
+    driver = c("ship_a", "ship_b", "fish_a"),
+    driver_group = c("shipping", "shipping", "fishing"),
+    stringsAsFactors = FALSE
+  )
+
+  out <- layers_aggregate_groups(
+    dat,
+    group_col = "driver_group",
+    within_fun = "mean",
+    across_fun = "sum",
+    exportAs = "matrix"
+  )
+
+  # shipping mean: (1+3)/2,(2+4)/2 => 2,3 ; plus fishing 10,20 => 12,23
+  expect_equal(as.numeric(out[, 1]), c(12, 23))
+})
+
+test_that("layers_aggregate_groups supports group weights", {
+  tmpl <- terra::rast(ncols = 1, nrows = 1, xmin = 0, xmax = 1, ymin = 0, ymax = 1, crs = "EPSG:3857")
+  dat <- cbind(
+    cod_ship_a = 1,
+    cod_ship_b = 3,
+    cod_fish_a = 10
+  )
+  dat <- with_template(dat, tmpl)
+  attr(dat, "layer_map") <- data.frame(
+    layer = colnames(dat),
+    vc = "cod",
+    driver = c("ship_a", "ship_b", "fish_a"),
+    driver_group = c("shipping", "shipping", "fishing"),
+    stringsAsFactors = FALSE
+  )
+
+  out <- layers_aggregate_groups(
+    dat,
+    group_col = "driver_group",
+    within_fun = "mean",
+    across_fun = "sum",
+    group_weights = c(shipping = 0.5, fishing = 1),
+    exportAs = "matrix"
+  )
+
+  # weighted sum: 0.5 * mean(1,3) + 1 * 10 = 11
+  expect_equal(as.numeric(out[, 1]), 11)
+})

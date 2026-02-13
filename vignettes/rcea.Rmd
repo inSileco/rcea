@@ -69,6 +69,24 @@ ce <- cea(cube$stack$drivers, cube$stack$vc, cube$sensitivity)
 ce
 ```
 
+### Optional preprocessing before CEA
+
+You can preprocess layers after stacking and before CEA. This supports global
+defaults and optional per-layer catalog overrides (`transform`, `normalize`).
+
+```{r, eval=FALSE}
+cube <- preprocess_layers(
+  cube,
+  drivers_transform = "log1p",
+  drivers_normalize = "minmax",
+  vc_transform = "none",
+  vc_normalize = "none",
+  use_catalog_overrides = TRUE
+)
+
+ce <- cea(cube$stack$drivers, cube$stack$vc, cube$sensitivity)
+```
+
 ## Exposure (overlap)
 
 ```{r}
@@ -109,6 +127,33 @@ You can also change the aggregation function (e.g., mean):
 cea_by_vc_mean <- layers_aggregate(ce, by = "drivers", fun = "mean")
 cea_by_vc_mean
 terra::plot(cea_by_vc_mean)
+```
+
+### Group-balanced aggregation
+
+When one pressure group has many more member layers than another (e.g., many
+shipping categories vs fewer fishing categories), direct summation can over-weight
+the larger group. `layers_aggregate_groups()` uses a two-stage strategy:
+within-group aggregation first, then across-group aggregation.
+
+```{r, eval=FALSE}
+cea_balanced <- layers_aggregate_groups(
+  ce,
+  group_col = "driver_group",
+  time_col = "driver_month",
+  within_fun = "mean",
+  across_fun = "sum"
+)
+
+# Optional group weights in across-group stage
+cea_balanced_w <- layers_aggregate_groups(
+  ce,
+  group_col = "driver_group",
+  time_col = "driver_month",
+  within_fun = "mean",
+  across_fun = "sum",
+  group_weights = c(shipping = 0.8, fishing = 1.0)
+)
 ```
 
 ## Per‑area effects

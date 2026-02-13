@@ -403,6 +403,131 @@ layers_aggregate <- function(dat,
   dat
 }
 
+#' Aggregate layers with group balancing
+#'
+#' Performs two-stage aggregation to avoid bias from groups with more member
+#' layers:
+#' 1) aggregate within groups (e.g., mean across shipping categories),
+#' 2) aggregate across groups (e.g., sum shipping + fishing).
+#'
+#' @param dat SpatRaster, matrix (with `template` attribute), or rcea_result.
+#' @param group_col Grouping column in `layer_map` used for balancing (e.g., `driver_group`).
+#' @param time_col Optional time column in `layer_map` (e.g., `driver_month`) to keep
+#'   temporal slices separate during both aggregation stages.
+#' @param keep_vc Logical; if TRUE (default), aggregation is performed separately per VC.
+#' @param within_fun Aggregation function within each group.
+#' @param across_fun Aggregation function across groups.
+#' @param group_weights Optional named numeric vector of group weights applied in
+#'   the across-group stage. Names must match values in `group_col`.
+#' @param exportAs string, "SpatRaster" or "matrix".
+#' @return Aggregated object (SpatRaster by default).
+#'
+#' @export
+layers_aggregate_groups <- function(dat,
+                                    group_col = "driver_group",
+                                    time_col = NULL,
+                                    keep_vc = TRUE,
+                                    within_fun = c("mean", "sum", "median", "min", "max", "sd"),
+                                    across_fun = c("sum", "mean", "median", "min", "max", "sd"),
+                                    group_weights = NULL,
+                                    exportAs = c("SpatRaster", "matrix")) {
+  within_fun <- match.arg(within_fun)
+  across_fun <- match.arg(across_fun)
+  exportAs <- match.arg(exportAs)
+
+  res <- extract_result(dat)
+  layer_map <- res$map
+  if (is.null(layer_map)) {
+    stop("layers_aggregate_groups requires layer metadata (`layer_map`).", call. = FALSE)
+  }
+  if (!group_col %in% names(layer_map)) {
+    stop("Unknown group_col: ", group_col, call. = FALSE)
+  }
+  if (!is.null(time_col) && !time_col %in% names(layer_map)) {
+    stop("Unknown time_col: ", time_col, call. = FALSE)
+  }
+
+  vc_col <- NULL
+  if (isTRUE(keep_vc)) {
+    vc_col <- if ("vc_vc_id" %in% names(layer_map)) "vc_vc_id" else if ("vc" %in% names(layer_map)) "vc" else NULL
+    if (is.null(vc_col)) {
+      stop("Could not resolve VC column in layer_map for keep_vc = TRUE.", call. = FALSE)
+    }
+  }
+
+  within_by <- c(if (!is.null(vc_col)) vc_col, if (!is.null(time_col)) time_col, group_col)
+  stage1 <- layers_aggregate(dat, group_by = within_by, fun = within_fun, exportAs = "matrix")
+  stage1_map <- attr(stage1, "layer_map")
+
+  across_by <- setdiff(within_by, group_col)
+
+  if (is.null(group_weights)) {
+    if (!length(across_by)) {
+      return(layers_aggregate(stage1, by = "both", fun = across_fun, exportAs = exportAs))
+    }
+    return(layers_aggregate(stage1, group_by = across_by, fun = across_fun, exportAs = exportAs))
+  }
+
+  if (!is.numeric(group_weights) || is.null(names(group_weights))) {
+    stop("group_weights must be a named numeric vector.", call. = FALSE)
+  }
+  if (!across_fun %in% c("sum", "mean")) {
+    stop("Weighted across-group aggregation currently supports across_fun = 'sum' or 'mean'.", call. = FALSE)
+  }
+
+  grp_vals <- as.character(stage1_map[[group_col]])
+  missing_w <- setdiff(unique(grp_vals), names(group_weights))
+  if (length(missing_w)) {
+    stop("Missing group_weights for groups: ", paste(missing_w, collapse = ", "), call. = FALSE)
+  }
+  w <- as.numeric(group_weights[grp_vals])
+
+  agg_fun <- switch(across_fun,
+    "sum" = function(x, ww) rowSums(sweep(x, 2, ww, `*`), na.rm = TRUE),
+    "mean" = function(x, ww) {
+      denom <- sum(ww)
+      if (!is.finite(denom) || denom == 0) stop("group_weights sum must be > 0.", call. = FALSE)
+      rowSums(sweep(x, 2, ww, `*`), na.rm = TRUE) / denom
+    }
+  )
+
+  if (!length(across_by)) {
+    out_mat <- matrix(agg_fun(stage1, w), ncol = 1)
+    colnames(out_mat) <- "cumulative"
+    out_map <- data.frame(layer = "cumulative", vc = NA_character_, driver = NA_character_, stringsAsFactors = FALSE)
+  } else {
+    grp_df <- stage1_map[, across_by, drop = FALSE]
+    lbl <- if (length(across_by) == 1) {
+      as.character(grp_df[[1]])
+    } else {
+      apply(grp_df, 1, function(x) paste(paste0(across_by, "=", as.character(x)), collapse = "|"))
+    }
+    lbl[is.na(lbl) | !nzchar(lbl)] <- "NA"
+    uniq <- unique(lbl)
+
+    out_cols <- lapply(uniq, function(u) {
+      idx <- which(lbl == u)
+      agg_fun(stage1[, idx, drop = FALSE], w[idx])
+    })
+    out_mat <- do.call(cbind, out_cols)
+    colnames(out_mat) <- uniq
+
+    out_map <- cbind(
+      data.frame(layer = uniq, vc = NA_character_, driver = NA_character_, stringsAsFactors = FALSE),
+      grp_df[match(uniq, lbl), , drop = FALSE]
+    )
+    rownames(out_map) <- NULL
+  }
+
+  out_mat <- with_template(out_mat, attr(stage1, "template"))
+  attr(out_mat, "layer_map") <- out_map
+
+  if (exportAs == "matrix") return(out_mat)
+  out_r <- matrix_to_raster(out_mat, attr(out_mat, "template"), colnames(out_mat))
+  attr(out_r, "layer_map") <- out_map
+  out_r
+}
+
 #' Compute per-area effects for layered outputs
 #'
 #' Calculates per-unit-area values for each driver/VC layer using an area mask
