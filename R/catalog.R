@@ -32,9 +32,11 @@ load_catalog <- function(layers = file.path("catalog", "layers.csv"),
 }
 
 validate_catalog <- function(layers, groups) {
-  required <- c("layer_id", "path", "type", "group", "units", "crs", "res_x", "res_y")
+  required <- c("layer_id", "path", "type", "group")
   missing <- setdiff(required, names(layers))
   if (length(missing)) stop("Missing required columns in layers.csv: ", paste(missing, collapse = ", "), call. = FALSE)
+
+  if (!"units" %in% names(layers)) layers$units <- NA_character_
 
   # type enum
   valid_types <- c("pressure", "vc", "aux")
@@ -61,9 +63,56 @@ validate_catalog <- function(layers, groups) {
   # unique IDs
   if (any(duplicated(layers$layer_id))) stop("Duplicate layer_id in layers.csv", call. = FALSE)
 
-  # numeric res
+  meta <- lapply(seq_len(nrow(layers)), function(i) {
+    layer_id <- layers$layer_id[[i]]
+    path <- layers$path[[i]]
+
+    r <- tryCatch(
+      suppressWarnings(terra::rast(path)),
+      error = function(e) {
+        stop(
+          "Unable to read raster for layer '", layer_id, "' at '", path, "': ",
+          conditionMessage(e),
+          call. = FALSE
+        )
+      }
+    )
+
+    r_crs_desc <- tryCatch(terra::crs(r, describe = TRUE), error = function(e) NULL)
+    if (is.data.frame(r_crs_desc) && nrow(r_crs_desc) > 0 &&
+        !is.na(r_crs_desc$authority[1]) && !is.na(r_crs_desc$code[1])) {
+      crs <- paste0(r_crs_desc$authority[1], ":", r_crs_desc$code[1])
+    } else {
+      crs <- terra::crs(r)
+    }
+
+    r_res <- terra::res(r)
+    if (length(r_res) < 2 || any(!is.finite(r_res[1:2]))) {
+      stop("Raster resolution is invalid for layer '", layer_id, "' at '", path, "'", call. = FALSE)
+    }
+
+    raster_units <- tryCatch(terra::units(r)[1], error = function(e) NA_character_)
+    if (!is.character(raster_units) || !nzchar(raster_units)) raster_units <- NA_character_
+
+    list(
+      crs = crs,
+      res_x = as.numeric(r_res[1]),
+      res_y = as.numeric(r_res[2]),
+      units = raster_units
+    )
+  })
+
+  layers$crs <- vapply(meta, `[[`, character(1), "crs")
+  layers$res_x <- vapply(meta, `[[`, numeric(1), "res_x")
+  layers$res_y <- vapply(meta, `[[`, numeric(1), "res_y")
+
+  provided_units <- as.character(layers$units)
+  provided_units[!nzchar(provided_units)] <- NA_character_
+  derived_units <- vapply(meta, `[[`, character(1), "units")
+  layers$units <- ifelse(is.na(provided_units), derived_units, provided_units)
+
   if (any(!is.finite(layers$res_x)) || any(!is.finite(layers$res_y))) {
-    stop("res_x/res_y must be finite numerics", call. = FALSE)
+    stop("Derived res_x/res_y must be finite numerics", call. = FALSE)
   }
 
   list(layers = layers, groups = groups)

@@ -19,16 +19,68 @@ make_result <- function(data, layer_map, meta = list()) {
 
 # internal helper to build layer names/map
 #' @keywords internal
-build_layer_map <- function(drivers, vc) {
+build_layer_map <- function(drivers, vc, driver_meta = NULL, vc_meta = NULL) {
   dr_names <- names(drivers)
   vc_names <- names(vc)
   layer_names <- as.vector(outer(vc_names, dr_names, paste, sep = "_"))
+
+  normalize_meta <- function(meta, layer_names, id_col) {
+    if (is.null(meta)) {
+      out <- data.frame(layer = layer_names, stringsAsFactors = FALSE)
+    } else {
+      out <- as.data.frame(meta, stringsAsFactors = FALSE)
+      if (!"layer" %in% names(out)) {
+        if ("layer_id" %in% names(out)) {
+          out$layer <- out$layer_id
+        } else {
+          stop("layer metadata must include `layer` or `layer_id` column.", call. = FALSE)
+        }
+      }
+      out <- out[out$layer %in% layer_names, , drop = FALSE]
+      out <- out[match(layer_names, out$layer), , drop = FALSE]
+    }
+
+    if (!id_col %in% names(out)) {
+      out[[id_col]] <- out$layer
+    }
+
+    if ("time" %in% names(out)) {
+      time_chr <- as.character(out$time)
+      time_chr[!nzchar(time_chr)] <- NA_character_
+      if (!"year" %in% names(out)) {
+        out$year <- ifelse(grepl("^\\d{4}", time_chr), substr(time_chr, 1, 4), NA_character_)
+      }
+      if (!"month" %in% names(out)) {
+        out$month <- ifelse(grepl("^\\d{4}-\\d{2}", time_chr), substr(time_chr, 1, 7), NA_character_)
+      }
+    }
+
+    out
+  }
+
+  dr_meta <- normalize_meta(driver_meta, dr_names, "driver_id")
+  vc_meta <- normalize_meta(vc_meta, vc_names, "vc_id")
+
+  vc_idx <- rep(seq_along(vc_names), times = length(dr_names))
+  dr_idx <- rep(seq_along(dr_names), each = length(vc_names))
+
   layer_map <- data.frame(
     layer = layer_names,
-    vc = rep(vc_names, times = length(dr_names)),
-    driver = rep(dr_names, each = length(vc_names)),
+    vc = vc_names[vc_idx],
+    driver = dr_names[dr_idx],
     stringsAsFactors = FALSE
   )
+
+  vc_cols <- setdiff(names(vc_meta), "layer")
+  for (nm in vc_cols) {
+    layer_map[[paste0("vc_", nm)]] <- vc_meta[[nm]][vc_idx]
+  }
+
+  dr_cols <- setdiff(names(dr_meta), "layer")
+  for (nm in dr_cols) {
+    layer_map[[paste0("driver_", nm)]] <- dr_meta[[nm]][dr_idx]
+  }
+
   list(layer_names = layer_names, layer_map = layer_map)
 }
 

@@ -3,7 +3,10 @@ test_that("load_catalog validates structure and paths", {
   dir.create(tmp)
 
   tif <- file.path(tmp, "dummy.tif")
-  file.create(tif)
+  r <- terra::rast(ncols = 2, nrows = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2, crs = "EPSG:3857")
+  r[] <- 1
+  terra::units(r) <- "idx"
+  terra::writeRaster(r, tif, overwrite = TRUE)
 
   layers_path <- file.path(tmp, "layers.csv")
   groups_path <- file.path(tmp, "groups.yaml")
@@ -13,10 +16,6 @@ test_that("load_catalog validates structure and paths", {
     path = tif,
     type = "pressure",
     group = "shipping",
-    units = "idx",
-    crs = "EPSG:3857",
-    res_x = 1,
-    res_y = 1,
     stringsAsFactors = FALSE
   )
   write.csv(layers, layers_path, row.names = FALSE)
@@ -28,6 +27,10 @@ test_that("load_catalog validates structure and paths", {
   expect_true(is.list(out))
   expect_true(all(c("layers", "groups") %in% names(out)))
   expect_equal(out$layers$layer_id, "shipping")
+  expect_equal(out$layers$crs, "EPSG:3857")
+  expect_equal(out$layers$res_x, 1)
+  expect_equal(out$layers$res_y, 1)
+  expect_equal(out$layers$units, "idx")
 })
 
 test_that("validate_catalog flags bad inputs", {
@@ -35,17 +38,15 @@ test_that("validate_catalog flags bad inputs", {
   dir.create(tmp)
 
   tif <- file.path(tmp, "dummy.tif")
-  file.create(tif)
+  r <- terra::rast(ncols = 2, nrows = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2, crs = "EPSG:3857")
+  r[] <- 1
+  terra::writeRaster(r, tif, overwrite = TRUE)
 
   base_layers <- data.frame(
     layer_id = "l1",
     path = tif,
     type = "pressure",
     group = "shipping",
-    units = "idx",
-    crs = "EPSG:3857",
-    res_x = 1,
-    res_y = 1,
     stringsAsFactors = FALSE
   )
 
@@ -66,9 +67,10 @@ test_that("validate_catalog flags bad inputs", {
   dup <- rbind(base_layers, base_layers)
   expect_error(validate_catalog(dup, groups), "Duplicate layer_id")
 
-  bad_res <- base_layers
-  bad_res$res_x <- NA
-  expect_error(validate_catalog(bad_res, groups), "res_x/res_y must be finite")
+  bad_raster <- base_layers
+  bad_raster$path <- file.path(tmp, "not_a_raster.tif")
+  writeLines("not a raster", bad_raster$path)
+  expect_error(validate_catalog(bad_raster, groups), "Unable to read raster")
 })
 
 test_that("normalize_aoi supports bbox, WKT, and SpatVector", {

@@ -10,6 +10,7 @@ layers_aggregate(
   drivers = NULL,
   vcs = NULL,
   by = c("both", "drivers", "vcs", "none"),
+  group_by = NULL,
   fun = c("sum", "mean", "median", "min", "max", "sd"),
   exportAs = c("SpatRaster", "matrix")
 )
@@ -25,6 +26,9 @@ layers_aggregate(
 
 \item{by}{Aggregation mode: "both" (single layer), "drivers" (aggregate over drivers per VC),
 "vcs" (aggregate over VCs per driver), or "none" (no aggregation).}
+
+\item{group_by}{Optional metadata columns in \code{layer_map} used to group layers before aggregation.
+When set, this takes precedence over \code{by}.}
 
 \item{fun}{Aggregation function: "sum", "mean", "median", "min", "max", "sd".}
 

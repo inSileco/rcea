@@ -102,6 +102,8 @@ layers_extract <- function(dat, layer_ids = NULL, drivers = NULL, vcs = NULL) {
 #' @param vcs Optional valued component names to keep (matches prefix before `_`).
 #' @param by Aggregation mode: "both" (single layer), "drivers" (aggregate over drivers per VC),
 #'   "vcs" (aggregate over VCs per driver), or "none" (no aggregation).
+#' @param group_by Optional metadata columns in `layer_map` used to group layers before aggregation.
+#'   When set, this takes precedence over `by`.
 #' @param fun Aggregation function: "sum", "mean", "median", "min", "max", "sd".
 #' @param exportAs string, "SpatRaster" or "matrix".
 #' @return Aggregated object (SpatRaster by default).
@@ -143,6 +145,7 @@ layers_aggregate <- function(dat,
                              drivers = NULL,
                              vcs = NULL,
                              by = c("both", "drivers", "vcs", "none"),
+                             group_by = NULL,
                              fun = c("sum", "mean", "median", "min", "max", "sd"),
                              exportAs = c("SpatRaster", "matrix")) {
   by <- match.arg(by)
@@ -172,9 +175,52 @@ layers_aggregate <- function(dat,
     )
   }
 
+  resolve_grouping <- function(layer_names) {
+    if (is.null(group_by)) return(NULL)
+    if (is.null(layer_map)) {
+      stop("`group_by` requires layer metadata (`layer_map`) but none was found.", call. = FALSE)
+    }
+
+    map <- layer_map[match(layer_names, layer_map$layer), , drop = FALSE]
+    if (anyNA(map$layer)) {
+      stop("`group_by` could not align selected layers with `layer_map`.", call. = FALSE)
+    }
+
+    missing_group_cols <- setdiff(group_by, names(map))
+    if (length(missing_group_cols)) {
+      stop("Unknown `group_by` columns: ", paste(missing_group_cols, collapse = ", "), call. = FALSE)
+    }
+
+    grp_df <- map[, group_by, drop = FALSE]
+    labels <- if (length(group_by) == 1) {
+      as.character(grp_df[[1]])
+    } else {
+      apply(grp_df, 1, function(x) {
+        x_chr <- as.character(x)
+        x_chr[is.na(x_chr) | !nzchar(x_chr)] <- "NA"
+        paste(paste0(group_by, "=", x_chr), collapse = "|")
+      })
+    }
+    labels[is.na(labels) | !nzchar(labels)] <- "NA"
+
+    first <- !duplicated(labels)
+    grp_labels <- labels[first]
+    grp_index <- lapply(grp_labels, function(lbl) which(labels == lbl))
+    names(grp_index) <- grp_labels
+
+    grp_map <- cbind(
+      data.frame(layer = grp_labels, vc = NA_character_, driver = NA_character_, stringsAsFactors = FALSE),
+      grp_df[first, , drop = FALSE]
+    )
+    rownames(grp_map) <- NULL
+
+    list(index = grp_index, map = grp_map)
+  }
+
   if (is.matrix(dat)) {
     template <- attr(dat, "template")
     nms <- colnames(dat)
+    grp <- resolve_grouping(nms)
     if (!is.null(layer_map)) {
       vc_ids <- layer_map$vc[match(nms, layer_map$layer)]
       dr_ids <- layer_map$driver[match(nms, layer_map$layer)]
@@ -183,34 +229,43 @@ layers_aggregate <- function(dat,
       dr_ids <- sub(".*_", "", nms)
     }
 
-    out <- switch(by,
-      "none" = dat,
-      "drivers" = {
-        vc_levels <- unique(vc_ids)
-        tmp <- lapply(vc_levels, function(v) agg_fun(dat[, vc_ids == v, drop = FALSE]))
-        out <- do.call(cbind, tmp)
-        colnames(out) <- vc_levels
-        out
-      },
-      "vcs" = {
-        dr_levels <- unique(dr_ids)
-        tmp <- lapply(dr_levels, function(d) agg_fun(dat[, dr_ids == d, drop = FALSE]))
-        out <- do.call(cbind, tmp)
-        colnames(out) <- dr_levels
-        out
-      },
-      "both" = {
-        out <- matrix(agg_fun(dat), ncol = 1)
-        colnames(out) <- "cumulative"
-        out
-      }
-    )
+    out <- if (!is.null(grp)) {
+      tmp <- lapply(grp$index, function(idx) agg_fun(dat[, idx, drop = FALSE]))
+      out <- do.call(cbind, tmp)
+      colnames(out) <- names(grp$index)
+      out
+    } else {
+      switch(by,
+        "none" = dat,
+        "drivers" = {
+          vc_levels <- unique(vc_ids)
+          tmp <- lapply(vc_levels, function(v) agg_fun(dat[, vc_ids == v, drop = FALSE]))
+          out <- do.call(cbind, tmp)
+          colnames(out) <- vc_levels
+          out
+        },
+        "vcs" = {
+          dr_levels <- unique(dr_ids)
+          tmp <- lapply(dr_levels, function(d) agg_fun(dat[, dr_ids == d, drop = FALSE]))
+          out <- do.call(cbind, tmp)
+          colnames(out) <- dr_levels
+          out
+        },
+        "both" = {
+          out <- matrix(agg_fun(dat), ncol = 1)
+          colnames(out) <- "cumulative"
+          out
+        }
+      )
+    }
 
     out <- with_template(out, template)
     if (exportAs == "SpatRaster") {
       if (is.null(template)) stop("Matrix input lacks template attribute; cannot reconstruct raster.", call. = FALSE)
       out_r <- matrix_to_raster(out, template, colnames(out))
-      if (!is.null(layer_map)) {
+      if (!is.null(grp)) {
+        attr(out_r, "layer_map") <- grp$map
+      } else if (!is.null(layer_map)) {
         if (by == "drivers") {
           attr(out_r, "layer_map") <- data.frame(layer = names(out_r), vc = names(out_r), driver = NA, stringsAsFactors = FALSE)
         } else if (by == "vcs") {
@@ -223,7 +278,9 @@ layers_aggregate <- function(dat,
       }
       return(out_r)
     }
-    if (!is.null(layer_map)) {
+    if (!is.null(grp)) {
+      attr(out, "layer_map") <- grp$map
+    } else if (!is.null(layer_map)) {
       if (by == "drivers") {
         attr(out, "layer_map") <- data.frame(layer = colnames(out), vc = colnames(out), driver = NA, stringsAsFactors = FALSE)
       } else if (by == "vcs") {
@@ -239,6 +296,7 @@ layers_aggregate <- function(dat,
 
   if (inherits(dat, "SpatRaster")) {
     nms <- names(dat)
+    grp <- resolve_grouping(nms)
     if (!is.null(layer_map)) {
       vc_ids <- layer_map$vc[match(nms, layer_map$layer)]
       dr_ids <- layer_map$driver[match(nms, layer_map$layer)]
@@ -247,32 +305,42 @@ layers_aggregate <- function(dat,
       dr_ids <- sub(".*_", "", nms)
     }
 
-    out <- switch(by,
-      "none" = dat,
-      "drivers" = {
-        vc_levels <- unique(vc_ids)
-        tmp <- lapply(vc_levels, function(v) {
-          terra::app(dat[[vc_ids == v]], get(fun, mode = "function"), na.rm = TRUE)
-        })
-        names(tmp) <- vc_levels
-        terra::rast(tmp)
-      },
-      "vcs" = {
-        dr_levels <- unique(dr_ids)
-        tmp <- lapply(dr_levels, function(d) {
-          terra::app(dat[[dr_ids == d]], get(fun, mode = "function"), na.rm = TRUE)
-        })
-        names(tmp) <- dr_levels
-        terra::rast(tmp)
-      },
-      "both" = {
-        terra::app(dat, get(fun, mode = "function"), na.rm = TRUE)
-      }
-    )
+    out <- if (!is.null(grp)) {
+      tmp <- lapply(grp$index, function(idx) {
+        terra::app(dat[[idx]], get(fun, mode = "function"), na.rm = TRUE)
+      })
+      names(tmp) <- names(grp$index)
+      terra::rast(tmp)
+    } else {
+      switch(by,
+        "none" = dat,
+        "drivers" = {
+          vc_levels <- unique(vc_ids)
+          tmp <- lapply(vc_levels, function(v) {
+            terra::app(dat[[vc_ids == v]], get(fun, mode = "function"), na.rm = TRUE)
+          })
+          names(tmp) <- vc_levels
+          terra::rast(tmp)
+        },
+        "vcs" = {
+          dr_levels <- unique(dr_ids)
+          tmp <- lapply(dr_levels, function(d) {
+            terra::app(dat[[dr_ids == d]], get(fun, mode = "function"), na.rm = TRUE)
+          })
+          names(tmp) <- dr_levels
+          terra::rast(tmp)
+        },
+        "both" = {
+          terra::app(dat, get(fun, mode = "function"), na.rm = TRUE)
+        }
+      )
+    }
 
     if (exportAs == "matrix") {
       out_mat <- raster_to_matrix(out)
-      if (!is.null(layer_map)) {
+      if (!is.null(grp)) {
+        attr(out_mat, "layer_map") <- grp$map
+      } else if (!is.null(layer_map)) {
         if (by == "drivers") {
           attr(out_mat, "layer_map") <- data.frame(layer = colnames(out_mat), vc = colnames(out_mat), driver = NA, stringsAsFactors = FALSE)
         } else if (by == "vcs") {
@@ -285,7 +353,9 @@ layers_aggregate <- function(dat,
       }
       return(out_mat)
     }
-    if (!is.null(layer_map)) {
+    if (!is.null(grp)) {
+      attr(out, "layer_map") <- grp$map
+    } else if (!is.null(layer_map)) {
       if (by == "drivers") {
         attr(out, "layer_map") <- data.frame(layer = names(out), vc = names(out), driver = NA, stringsAsFactors = FALSE)
       } else if (by == "vcs") {
@@ -301,6 +371,9 @@ layers_aggregate <- function(dat,
 
   # data.frame fallback (legacy)
   if (is.data.frame(dat)) {
+    if (!is.null(group_by)) {
+      stop("`group_by` is not supported for legacy data.frame inputs.", call. = FALSE)
+    }
     if (by == "none") {
       return(dat)
     }

@@ -152,3 +152,45 @@ test_that("stack_layers errors on misaligned rasters when align = 'error'", {
     "extents do not match"
   )
 })
+
+test_that("cea_cube carries catalog time metadata into layer_map grouping", {
+  td <- tempdir()
+  r1 <- terra::rast(ncols = 2, nrows = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2, crs = "EPSG:3857")
+  r2 <- r1
+  r3 <- r1
+  terra::values(r1) <- 1
+  terra::values(r2) <- 2
+  terra::values(r3) <- 1
+
+  p1 <- file.path(td, "shipping_2020_01.tif")
+  p2 <- file.path(td, "shipping_2020_02.tif")
+  p3 <- file.path(td, "cod.tif")
+  terra::writeRaster(r1, p1, overwrite = TRUE)
+  terra::writeRaster(r2, p2, overwrite = TRUE)
+  terra::writeRaster(r3, p3, overwrite = TRUE)
+
+  catalog <- list(
+    layers = data.frame(
+      layer_id = c("shipping_2020_01", "shipping_2020_02", "cod"),
+      path = c(p1, p2, p3),
+      type = c("pressure", "pressure", "vc"),
+      group = c("shipping", "shipping", "fish"),
+      driver_id = c("shipping", "shipping", NA),
+      vc_id = c(NA, NA, "cod"),
+      time = c("2020-01-15", "2020-02-15", NA),
+      stringsAsFactors = FALSE
+    ),
+    groups = list()
+  )
+
+  cube <- make_cube(catalog)
+  cube <- stack_layers(cube)
+
+  sens <- matrix(1, nrow = 1, ncol = 2, dimnames = list("cod", c("shipping_2020_01", "shipping_2020_02")))
+  ce <- cea_cube(cube, sensitivity = sens, exportAs = "matrix", engine = "matrix")
+
+  expect_true("driver_month" %in% names(ce$layer_map))
+  grouped <- layers_aggregate(ce, group_by = "driver_month", exportAs = "matrix")
+  expect_equal(ncol(grouped), 2)
+  expect_setequal(colnames(grouped), c("2020-01", "2020-02"))
+})

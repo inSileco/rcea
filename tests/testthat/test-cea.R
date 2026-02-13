@@ -123,3 +123,149 @@ test_that("cea_cube uses cube stacks and sensitivity", {
 
   expect_equal(terra::values(ce1$data, mat = TRUE), terra::values(ce2$data, mat = TRUE))
 })
+
+test_that("cea pair_by filters to matched temporal pairs", {
+  tmpl <- terra::rast(ncols = 2, nrows = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2, crs = "EPSG:3857")
+
+  d1 <- tmpl
+  d2 <- tmpl
+  v1 <- tmpl
+  v2 <- tmpl
+  terra::values(d1) <- c(1, 2, 3, 4)
+  terra::values(d2) <- c(10, 20, 30, 40)
+  terra::values(v1) <- c(1, 1, 1, 1)
+  terra::values(v2) <- c(2, 2, 2, 2)
+
+  drivers <- c(d1, d2)
+  vc <- c(v1, v2)
+  names(drivers) <- c("shipping_2020-01", "shipping_2020-02")
+  names(vc) <- c("cod_2020-01", "cod_2020-02")
+
+  driver_meta <- data.frame(
+    layer = names(drivers),
+    driver_id = "shipping",
+    time = c("2020-01-15", "2020-02-15"),
+    stringsAsFactors = FALSE
+  )
+  vc_meta <- data.frame(
+    layer = names(vc),
+    vc_id = "cod",
+    time = c("2020-01-01", "2020-02-01"),
+    stringsAsFactors = FALSE
+  )
+
+  sens <- matrix(0.5, nrow = 1, ncol = 1, dimnames = list("cod", "shipping"))
+
+  ce <- cea(
+    drivers, vc, sens,
+    exportAs = "matrix",
+    engine = "matrix",
+    driver_meta = driver_meta,
+    vc_meta = vc_meta,
+    pair_by = "month"
+  )
+
+  expect_equal(colnames(ce$data), c("cod_2020-01_shipping_2020-01", "cod_2020-02_shipping_2020-02"))
+  expect_equal(ncol(ce$data), 2)
+
+  expected <- cbind(
+    terra::values(v1, mat = TRUE)[, 1] * terra::values(d1, mat = TRUE)[, 1] * 0.5,
+    terra::values(v2, mat = TRUE)[, 1] * terra::values(d2, mat = TRUE)[, 1] * 0.5
+  )
+  out <- ce$data
+  attr(out, "layer_map") <- NULL
+  attr(out, "template") <- NULL
+  expect_equal(unname(out), unname(expected))
+})
+
+test_that("cea pair_by errors when requested keys are missing", {
+  dat <- make_test_rasters()
+  expect_error(
+    cea(dat$drivers, dat$vc, dat$sensitivity, engine = "matrix", pair_by = "month"),
+    "requires both"
+  )
+})
+
+test_that("cea pair_by broadcasts when one side has missing key values", {
+  tmpl <- terra::rast(ncols = 2, nrows = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2, crs = "EPSG:3857")
+  d1 <- tmpl
+  d2 <- tmpl
+  v1 <- tmpl
+  v2 <- tmpl
+  terra::values(d1) <- 1
+  terra::values(d2) <- 2
+  terra::values(v1) <- 3
+  terra::values(v2) <- 4
+
+  drivers <- c(d1, d2)
+  vc <- c(v1, v2)
+  names(drivers) <- c("shipping_jan", "coastal_static")
+  names(vc) <- c("cod_jan", "cod_feb")
+
+  driver_meta <- data.frame(
+    layer = names(drivers),
+    driver_id = c("shipping", "coastal"),
+    month = c("2020-01", NA),
+    stringsAsFactors = FALSE
+  )
+  vc_meta <- data.frame(
+    layer = names(vc),
+    vc_id = "cod",
+    month = c("2020-01", "2020-02"),
+    stringsAsFactors = FALSE
+  )
+
+  sens <- matrix(1, nrow = 1, ncol = 2, dimnames = list("cod", c("shipping", "coastal")))
+
+  ce <- cea(
+    drivers, vc, sens,
+    exportAs = "matrix",
+    engine = "matrix",
+    driver_meta = driver_meta,
+    vc_meta = vc_meta,
+    pair_by = "month"
+  )
+
+  expect_setequal(
+    colnames(ce$data),
+    c("cod_jan_shipping_jan", "cod_jan_coastal_static", "cod_feb_coastal_static")
+  )
+  expect_equal(ncol(ce$data), 3)
+})
+
+test_that("cea pair_by strict drops pairs with missing key values", {
+  tmpl <- terra::rast(ncols = 1, nrows = 1, xmin = 0, xmax = 1, ymin = 0, ymax = 1, crs = "EPSG:3857")
+  drivers <- c(tmpl, tmpl)
+  vc <- c(tmpl, tmpl)
+  names(drivers) <- c("shipping_jan", "coastal_static")
+  names(vc) <- c("cod_jan", "cod_feb")
+  terra::values(drivers) <- 1
+  terra::values(vc) <- 1
+
+  driver_meta <- data.frame(
+    layer = names(drivers),
+    driver_id = c("shipping", "coastal"),
+    month = c("2020-01", NA),
+    stringsAsFactors = FALSE
+  )
+  vc_meta <- data.frame(
+    layer = names(vc),
+    vc_id = "cod",
+    month = c("2020-01", "2020-02"),
+    stringsAsFactors = FALSE
+  )
+
+  sens <- matrix(1, nrow = 1, ncol = 2, dimnames = list("cod", c("shipping", "coastal")))
+  ce <- cea(
+    drivers, vc, sens,
+    exportAs = "matrix",
+    engine = "matrix",
+    driver_meta = driver_meta,
+    vc_meta = vc_meta,
+    pair_by = "month",
+    pair_missing = "strict"
+  )
+
+  expect_equal(colnames(ce$data), "cod_jan_shipping_jan")
+  expect_equal(ncol(ce$data), 1)
+})

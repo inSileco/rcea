@@ -131,3 +131,67 @@ ce_mat <- cea(cube$stack$drivers, cube$stack$vc, cube$sensitivity, exportAs = "m
 cea_by_vc_mat <- layers_aggregate(ce_mat, by = "drivers", exportAs = "matrix")
 head(cea_by_vc_mat)
 ```
+
+## Temporal pairing with mixed temporal/atemporal layers
+
+`pair_by` lets you avoid invalid cross-time combinations. By default, missing keys are
+treated as broadcast (`pair_missing = "broadcast"`), so atemporal layers still apply to
+all temporal slices.
+
+```{r, eval=FALSE}
+tmpl <- terra::rast(ncols = 2, nrows = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2, crs = "EPSG:3857")
+
+# Drivers: one monthly layer + one atemporal layer
+d_month <- tmpl
+d_static <- tmpl
+terra::values(d_month) <- 1
+terra::values(d_static) <- 2
+drivers <- c(d_month, d_static)
+names(drivers) <- c("shipping_jan", "coastal_dev")
+
+# VC: two monthly slices
+v_jan <- tmpl
+v_feb <- tmpl
+terra::values(v_jan) <- 3
+terra::values(v_feb) <- 4
+vc <- c(v_jan, v_feb)
+names(vc) <- c("cod_jan", "cod_feb")
+
+driver_meta <- data.frame(
+  layer = names(drivers),
+  driver_id = c("shipping", "coastal"),
+  month = c("2020-01", NA),
+  stringsAsFactors = FALSE
+)
+vc_meta <- data.frame(
+  layer = names(vc),
+  vc_id = "cod",
+  month = c("2020-01", "2020-02"),
+  stringsAsFactors = FALSE
+)
+
+sens <- matrix(1, nrow = 1, ncol = 2, dimnames = list("cod", c("shipping", "coastal")))
+
+# Default broadcast behavior:
+# - cod_jan pairs with shipping_jan and coastal_dev
+# - cod_feb pairs with coastal_dev (shipping_jan does not match)
+ce_pair <- cea(
+  drivers, vc, sens,
+  exportAs = "matrix",
+  driver_meta = driver_meta,
+  vc_meta = vc_meta,
+  pair_by = "month"
+)
+colnames(ce_pair$data)
+
+# Strict mode (optional): requires both sides to have matching month
+ce_pair_strict <- cea(
+  drivers, vc, sens,
+  exportAs = "matrix",
+  driver_meta = driver_meta,
+  vc_meta = vc_meta,
+  pair_by = "month",
+  pair_missing = "strict"
+)
+colnames(ce_pair_strict$data)
+```

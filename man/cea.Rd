@@ -13,7 +13,11 @@ cea(
   template = NULL,
   cores = NULL,
   filename = NULL,
-  engine = "matrix"
+  engine = "matrix",
+  driver_meta = NULL,
+  vc_meta = NULL,
+  pair_by = NULL,
+  pair_missing = c("broadcast", "strict")
 )
 }
 \arguments{
@@ -34,6 +38,16 @@ cea(
 \item{filename}{optional path to write the output raster stack (useful for large jobs).}
 
 \item{engine}{calculation engine, one of "matrix" (fast, in-memory) or "terra" (streaming/chunked).}
+
+\item{driver_meta}{Optional data.frame with metadata for driver layers (matched by \code{layer} or \code{layer_id}).}
+
+\item{vc_meta}{Optional data.frame with metadata for valued component layers (matched by \code{layer} or \code{layer_id}).}
+
+\item{pair_by}{Optional vector of metadata keys that must match between VC and drivers (e.g. "month", "year", "time").
+When set, only matched VC-driver pairs are computed.}
+
+\item{pair_missing}{Pairing behavior when one side is missing a \code{pair_by} key:
+\code{"broadcast"} (default) allows the pair; \code{"strict"} requires both sides to be present and equal.}
 }
 \description{
 Assessment of cumulative effects using the Halpern et al. 2008 method.

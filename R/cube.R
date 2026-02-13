@@ -146,6 +146,9 @@ stack_layers <- function(cube,
       }
     }
     names(r) <- lay_sub$layer_id
+    layer_meta <- lay_sub
+    layer_meta$layer <- lay_sub$layer_id
+    attr(r, "layer_meta") <- layer_meta
     r
   }
 
@@ -156,6 +159,17 @@ stack_layers <- function(cube,
     aligned <- align_pair(drivers_stack, vc_stack, align = align, template = template)
     drivers_stack <- aligned$drivers
     vc_stack <- aligned$vc
+  }
+
+  if (!is.null(drivers_stack)) {
+    dr_meta <- lay_dr
+    dr_meta$layer <- lay_dr$layer_id
+    attr(drivers_stack, "layer_meta") <- dr_meta
+  }
+  if (!is.null(vc_stack)) {
+    vc_meta <- lay_vc
+    vc_meta$layer <- lay_vc$layer_id
+    attr(vc_stack, "layer_meta") <- vc_meta
   }
 
   cube$stack <- list(drivers = drivers_stack, vc = vc_stack)

@@ -74,3 +74,39 @@ test_that("layers_aggregate supports mean on matrix", {
   dimnames(expected) <- NULL
   expect_equal(res, expected)
 })
+
+test_that("layers_aggregate supports metadata-based grouping", {
+  dat <- make_layers_rasters()
+
+  names(dat$drivers) <- c("shipping_2020-01", "shipping_2020-02")
+  colnames(dat$sensitivity) <- names(dat$drivers)
+
+  driver_meta <- data.frame(
+    layer = names(dat$drivers),
+    driver_id = "shipping",
+    time = c("2020-01-15", "2020-02-15"),
+    stringsAsFactors = FALSE
+  )
+
+  ce_mat <- cea(
+    dat$drivers,
+    dat$vc,
+    dat$sensitivity,
+    exportAs = "matrix",
+    engine = "matrix",
+    driver_meta = driver_meta
+  )
+
+  res <- layers_aggregate(ce_mat, group_by = "driver_month", exportAs = "matrix")
+
+  expected <- cbind(
+    `2020-01` = rowSums(ce_mat$data[, ce_mat$layer_map$driver_month == "2020-01", drop = FALSE], na.rm = TRUE),
+    `2020-02` = rowSums(ce_mat$data[, ce_mat$layer_map$driver_month == "2020-02", drop = FALSE], na.rm = TRUE)
+  )
+
+  attr(res, "layer_map") <- NULL
+  attr(res, "template") <- NULL
+  dimnames(res) <- NULL
+  dimnames(expected) <- NULL
+  expect_equal(res, expected)
+})

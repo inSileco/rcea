@@ -9,6 +9,12 @@
 #' @param cores number of threads for terra::app.
 #' @param filename optional path to write the output raster stack (useful for large jobs).
 #' @param engine calculation engine, one of "matrix" (fast, in-memory) or "terra" (streaming/chunked).
+#' @param driver_meta Optional data.frame with metadata for driver layers (matched by `layer` or `layer_id`).
+#' @param vc_meta Optional data.frame with metadata for valued component layers (matched by `layer` or `layer_id`).
+#' @param pair_by Optional vector of metadata keys that must match between VC and drivers (e.g. "month", "year", "time").
+#'   When set, only matched VC-driver pairs are computed.
+#' @param pair_missing Pairing behavior when one side is missing a `pair_by` key:
+#'   `"broadcast"` (default) allows the pair; `"strict"` requires both sides to be present and equal.
 #'
 #' @examples
 #' drv_paths <- system.file(
@@ -45,53 +51,137 @@ cea <- function(drivers,
                 template = NULL,
                 cores = NULL,
                 filename = NULL,
-                engine = "matrix") {
+                engine = "matrix",
+                driver_meta = NULL,
+                vc_meta = NULL,
+                pair_by = NULL,
+                pair_missing = c("broadcast", "strict")) {
   engine <- match.arg(engine, c("matrix", "terra"))
   exportAs <- match.arg(exportAs, c("SpatRaster", "matrix"))
+  pair_missing <- match.arg(pair_missing)
 
   # Align rasters if needed
   out_align <- align_pair(drivers, vc, align = align, template = template)
   drivers <- out_align$drivers
   vc <- out_align$vc
 
+  if (is.null(driver_meta)) driver_meta <- attr(drivers, "layer_meta")
+  if (is.null(vc_meta)) vc_meta <- attr(vc, "layer_meta")
+
   nmDr <- names(drivers)
   nmVC <- names(vc)
-  sensitivity <- sensitivity[nmVC, nmDr, drop = FALSE]
-  layer_info <- build_layer_map(drivers, vc)
-  layer_names <- layer_info$layer_names
-  layer_map <- layer_info$layer_map
+  nvc <- length(nmVC)
+  ndr <- length(nmDr)
+
+  layer_info <- build_layer_map(drivers, vc, driver_meta = driver_meta, vc_meta = vc_meta)
+  full_layer_names <- layer_info$layer_names
+  full_layer_map <- layer_info$layer_map
+
+  vc_keys_primary <- if ("vc_vc_id" %in% names(full_layer_map)) {
+    as.character(full_layer_map$vc_vc_id[seq_len(nvc)])
+  } else {
+    as.character(full_layer_map$vc[seq_len(nvc)])
+  }
+  dr_keys_primary <- if ("driver_driver_id" %in% names(full_layer_map)) {
+    as.character(full_layer_map$driver_driver_id[seq.int(1, nrow(full_layer_map), by = nvc)])
+  } else {
+    as.character(full_layer_map$driver[seq.int(1, nrow(full_layer_map), by = nvc)])
+  }
+  vc_keys_fallback <- as.character(full_layer_map$vc[seq_len(nvc)])
+  dr_keys_fallback <- as.character(full_layer_map$driver[seq.int(1, nrow(full_layer_map), by = nvc)])
+
+  if (is.null(rownames(sensitivity)) || is.null(colnames(sensitivity))) {
+    stop("sensitivity must have row and column names for VC and driver IDs.", call. = FALSE)
+  }
+
+  vc_keys <- if (all(unique(vc_keys_primary) %in% rownames(sensitivity))) {
+    vc_keys_primary
+  } else {
+    vc_keys_fallback
+  }
+  dr_keys <- if (all(unique(dr_keys_primary) %in% colnames(sensitivity))) {
+    dr_keys_primary
+  } else {
+    dr_keys_fallback
+  }
+
+  miss_vc <- setdiff(unique(vc_keys), rownames(sensitivity))
+  miss_dr <- setdiff(unique(dr_keys), colnames(sensitivity))
+  if (length(miss_vc)) {
+    stop("Missing VC IDs in sensitivity rownames: ", paste(miss_vc, collapse = ", "), call. = FALSE)
+  }
+  if (length(miss_dr)) {
+    stop("Missing driver IDs in sensitivity colnames: ", paste(miss_dr, collapse = ", "), call. = FALSE)
+  }
+  sensitivity <- sensitivity[vc_keys, dr_keys, drop = FALSE]
+
+  pair_mask <- matrix(TRUE, nrow = nvc, ncol = ndr)
+  if (!is.null(pair_by)) {
+    pair_keys <- unique(sub("^(driver_|vc_)", "", as.character(pair_by)))
+    for (k in pair_keys) {
+      vc_col <- paste0("vc_", k)
+      dr_col <- paste0("driver_", k)
+      if (!vc_col %in% names(full_layer_map) || !dr_col %in% names(full_layer_map)) {
+        stop("`pair_by` key '", k, "' requires both `", vc_col, "` and `", dr_col, "` in layer metadata.", call. = FALSE)
+      }
+      vc_vals <- as.character(full_layer_map[[vc_col]][seq_len(nvc)])
+      dr_vals <- as.character(full_layer_map[[dr_col]][seq.int(1, nrow(full_layer_map), by = nvc)])
+      pair_mask <- pair_mask & outer(vc_vals, dr_vals, function(v, d) {
+        v <- trimws(v)
+        d <- trimws(d)
+        v_missing <- is.na(v) | !nzchar(v)
+        d_missing <- is.na(d) | !nzchar(d)
+        if (pair_missing == "strict") {
+          !v_missing & !d_missing & (v == d)
+        } else {
+          v_missing | d_missing | (v == d)
+        }
+      })
+    }
+    if (!any(pair_mask)) {
+      stop("No valid VC-driver pairs matched `pair_by` keys.", call. = FALSE)
+    }
+  }
+
+  keep_idx <- which(as.vector(pair_mask))
+  layer_names <- full_layer_names[keep_idx]
+  layer_map <- full_layer_map[keep_idx, , drop = FALSE]
 
   if (engine == "matrix") {
-    # In-memory matrix path: build all vc_driver layers at once
+    # In-memory matrix path: build vc_driver layers in allowed pair mask
     dr_mat <- terra::values(drivers, mat = TRUE)
     vc_mat <- terra::values(vc, mat = TRUE)
-    out_mat <- NULL
+    out_list <- list()
+    out_names <- character(0)
     for (j in seq_along(nmDr)) {
-      exp_j <- vc_mat * dr_mat[, j]
-      eff_j <- sweep(exp_j, MARGIN = 2, sensitivity[, j], `*`)
-      out_mat <- cbind(out_mat, eff_j)
+      idx_v <- which(pair_mask[, j])
+      if (!length(idx_v)) next
+      exp_j <- vc_mat[, idx_v, drop = FALSE] * dr_mat[, j]
+      eff_j <- sweep(exp_j, MARGIN = 2, sensitivity[idx_v, j], `*`)
+      out_list[[length(out_list) + 1]] <- eff_j
+      out_names <- c(out_names, paste(nmVC[idx_v], nmDr[j], sep = "_"))
     }
+    out_mat <- do.call(cbind, out_list)
+    colnames(out_mat) <- out_names
+
     if (exportAs == "matrix") {
-      colnames(out_mat) <- layer_names
       out_mat <- with_template(out_mat, drivers[[1]])
       attr(out_mat, "layer_map") <- layer_map
       make_result(out_mat, layer_map, meta = list(engine = engine, exportAs = exportAs))
     } else {
-      out_r <- matrix_to_raster(out_mat, drivers[[1]], layer_names)
+      out_r <- matrix_to_raster(out_mat, drivers[[1]], out_names)
       attr(out_r, "layer_map") <- layer_map
       make_result(out_r, layer_map, meta = list(engine = engine, exportAs = exportAs))
     }
   } else {
     # Combined stack to avoid building exposure separately
     stk <- c(vc, drivers)
-    nvc <- terra::nlyr(vc)
-    ndr <- terra::nlyr(drivers)
 
     fun_ce <- function(x) {
       v <- x[seq_len(nvc)]
       d <- x[(nvc + 1):(nvc + ndr)]
       eff <- (v %o% d) * sensitivity
-      as.vector(eff)
+      as.vector(eff)[keep_idx]
     }
 
     args <- list(x = stk, fun = fun_ce)
@@ -160,5 +250,12 @@ cea_cube <- function(cube, sensitivity = NULL, ...) {
     stop("sensitivity not provided and cube$sensitivity is NULL.", call. = FALSE)
   }
 
-  cea(drivers, vc, sensitivity, ...)
+  cea(
+    drivers,
+    vc,
+    sensitivity,
+    driver_meta = attr(drivers, "layer_meta"),
+    vc_meta = attr(vc, "layer_meta"),
+    ...
+  )
 }
