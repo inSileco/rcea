@@ -286,3 +286,76 @@ test_that("preprocess_layers allows catalog overrides", {
   expect_equal(dr_meta$applied_normalize[dr_meta$layer == "shipping"], "max")
   expect_equal(vc_meta$applied_transform[vc_meta$layer == "cod"], "sqrt")
 })
+
+test_that("preprocess_layers supports q99 normalization", {
+  td <- tempdir()
+  dr <- terra::rast(ncols = 2, nrows = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2, crs = "EPSG:3857")
+  vc <- dr
+  terra::values(dr) <- c(0, 1, 3, 100)
+  terra::values(vc) <- c(1, 1, 1, 1)
+
+  p_dr <- file.path(td, "pre_q99_dr.tif")
+  p_vc <- file.path(td, "pre_q99_vc.tif")
+  terra::writeRaster(dr, p_dr, overwrite = TRUE)
+  terra::writeRaster(vc, p_vc, overwrite = TRUE)
+
+  catalog <- list(
+    layers = data.frame(
+      layer_id = c("shipping", "cod"),
+      path = c(p_dr, p_vc),
+      type = c("pressure", "vc"),
+      group = c("shipping", "fish"),
+      stringsAsFactors = FALSE
+    ),
+    groups = list()
+  )
+
+  cube <- make_cube(catalog)
+  cube <- stack_layers(cube)
+  cube <- preprocess_layers(cube, drivers_normalize = "q99")
+
+  out_dr <- as.numeric(terra::values(cube$stack$drivers[[1]], mat = TRUE)[, 1])
+  q99 <- as.numeric(stats::quantile(c(0, 1, 3, 100), probs = 0.99, na.rm = TRUE, names = FALSE))
+  expected <- pmin(pmax(c(0, 1, 3, 100) / q99, 0), 1)
+  expect_equal(out_dr, expected)
+})
+
+test_that("preprocess_layers supports binary threshold transforms with transform_param", {
+  td <- tempdir()
+  dr <- terra::rast(ncols = 2, nrows = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2, crs = "EPSG:3857")
+  vc <- dr
+  terra::values(dr) <- c(0.1, 0.2, 0.3, NA)
+  terra::values(vc) <- c(1, 1, 1, 1)
+
+  p_dr <- file.path(td, "pre_bin_dr.tif")
+  p_vc <- file.path(td, "pre_bin_vc.tif")
+  terra::writeRaster(dr, p_dr, overwrite = TRUE)
+  terra::writeRaster(vc, p_vc, overwrite = TRUE)
+
+  catalog <- list(
+    layers = data.frame(
+      layer_id = c("shipping", "cod"),
+      path = c(p_dr, p_vc),
+      type = c("pressure", "vc"),
+      group = c("shipping", "fish"),
+      transform = c("binary_gte", "none"),
+      transform_param = c(0.2, NA),
+      normalize = c("none", "none"),
+      stringsAsFactors = FALSE
+    ),
+    groups = list()
+  )
+
+  cube <- make_cube(catalog)
+  cube <- stack_layers(cube)
+  cube <- preprocess_layers(cube, use_catalog_overrides = TRUE)
+
+  out_dr <- as.numeric(terra::values(cube$stack$drivers[[1]], mat = TRUE)[, 1])
+  expect_equal(out_dr[1:3], c(0, 1, 1))
+  expect_true(is.na(out_dr[4]))
+
+  dr_meta <- attr(cube$stack$drivers, "layer_meta")
+  idx <- dr_meta$layer == "shipping"
+  expect_equal(dr_meta$applied_transform[idx], "binary_gte")
+  expect_equal(as.numeric(dr_meta$applied_transform_param[idx]), 0.2)
+})

@@ -16,14 +16,15 @@ preprocess_layers(
 \arguments{
 \item{cube}{rcea_cube with \code{stack_layers()} already run.}
 
-\item{use_catalog_overrides}{logical; if TRUE, use \code{transform} and
-\code{normalize} values from layer metadata when present.}
+\item{use_catalog_overrides}{logical; if TRUE, use \code{transform},
+\code{transform_param}, and \code{normalize} values from layer metadata when present.}
 
 \item{drivers_transform}{Default transform for driver layers. One of
-\code{"none"}, \code{"log1p"}, \code{"log10"}, \code{"sqrt"}.}
+\code{"none"}, \code{"log1p"}, \code{"log10"}, \code{"sqrt"}, \code{"binary_gt"}, \code{"binary_gte"},
+\code{"binary_lt"}, \code{"binary_lte"}.}
 
 \item{drivers_normalize}{Default normalization for driver layers. One of
-\code{"none"}, \code{"minmax"}, \code{"max"}.}
+\code{"none"}, \code{"minmax"}, \code{"max"}, \code{"q99"} (scale by 99th percentile and cap to 1).}
 
 \item{vc_transform}{Default transform for valued component layers.}
 
@@ -34,6 +35,7 @@ rcea_cube with transformed stacks.
 }
 \description{
 Apply optional per-layer transforms and normalization to cube stacks. Global
-defaults can be overridden by catalog columns (\code{transform}, \code{normalize}) when
+defaults can be overridden by catalog columns (\code{transform}, \code{transform_param},
+\code{normalize}) when
 available.
 }
